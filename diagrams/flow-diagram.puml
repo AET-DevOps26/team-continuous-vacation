@@ -1,0 +1,25 @@
+@startuml creation-flow
+title TripTailor - Itinerary Creation Flow
+
+actor User
+participant Frontend
+participant "API Gateway\n(Spring Boot)" as APIGW
+participant "Itinerary Service" as ITIN
+participant "GenAI Service\n(Python)" as AI
+participant "Trip Service" as TRIP
+database DB
+
+User -> Frontend : Enter trip details
+Frontend -> APIGW : POST /trips
+APIGW -> ITIN : Forward request
+ITIN -> AI : generate-itinerary()
+AI -> AI : Call LLM
+AI --> ITIN : Return JSON itinerary
+ITIN -> TRIP : Save trip
+TRIP -> DB : Insert data
+DB --> TRIP : Saved to DB
+TRIP --> ITIN : Saved trip
+ITIN --> APIGW : Response
+APIGW --> Frontend : Return itinerary
+
+@enduml

@@ -1,0 +1,56 @@
+@startuml class-diagram
+title TripTailor - Class Diagram
+
+class Trip {
+  +UUID id
+  +String destination
+  +Date startDate
+  +Date endDate
+  +String vibe
+}
+
+class Day {
+  +UUID id
+  +Date date
+  +UUID tripId
+}
+
+class Activity {
+  +UUID id
+  +String title
+  +String description
+  +String duration
+  +TimeBlock timeBlock
+  +UUID dayId
+  +Set<ActivityTag> tags
+  +Boolean isIndoor
+}
+
+enum TimeBlock {
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
+enum ActivityTag {
+  OUTDOOR
+  INDOOR
+  CULTURAL
+  SPORTY
+  RELAXING
+  ADVENTUROUS
+  FOOD
+  SHOPPING
+  FAMILY_FRIENDLY
+}
+
+class User {
+  +UUID id
+  +String name
+}
+
+User "1" --> "*" Trip : owns
+Trip "1" --> "*" Day : contains
+Day "1" --> "*" Activity : contains
+
+@enduml
