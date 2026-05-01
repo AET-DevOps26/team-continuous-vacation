@@ -1,0 +1,52 @@
+@startuml analysis-object-model
+title TripTailor - Analysis Object Model
+
+class Trip {
+  destination
+  dates
+  vibe
+  + view()
+  + create()
+}
+
+class Day {
+  date
+  + view()
+}
+
+class Activity {
+  title
+  description
+  duration
+  timeBlock
+  tags
+  + view()
+  + regenerate()
+}
+
+class User {
+  preferences
+  + createTrip()
+  + editActivity()
+}
+
+' Necessary?
+' ==========
+class GenAIService {
+  + generateItinerary()
+  + regenerateActivity()
+}
+
+Activity ..> GenAIService : uses
+Trip ..> GenAIService : uses
+' =========
+
+
+
+Trip "1" -- "*" Day
+Day "*" -- "*" Activity
+
+User ..> Trip : creates/views
+User ..> Activity : edits/regenerates
+
+@enduml
