@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: triptailor-db
+    environment:
+      POSTGRES_USER: tripuser
+      POSTGRES_PASSWORD: trippassword
+      POSTGRES_DB: triptailor
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tripuser -d triptailor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: triptailor-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/triptailor
+      - SPRING_DATASOURCE_USERNAME=tripuser
+      - SPRING_DATASOURCE_PASSWORD=trippassword
+      # Setting OpenTelemetry Service Name
+      - OTEL_SERVICE_NAME=triptailor-backend
+      - OTEL_METRICS_EXPORTER=none  # Disables metrics export
+      - OTEL_LOGS_EXPORTER=none     # Disables logs export
+      - OTEL_TRACES_EXPORTER=none    # Disables traces export
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: triptailor-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
