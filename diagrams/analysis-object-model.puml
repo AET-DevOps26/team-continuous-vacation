@@ -12,6 +12,7 @@ class Trip {
 class Day {
   date
   + view()
+  + regenerateActivity()
 }
 
 class Activity {
@@ -21,7 +22,6 @@ class Activity {
   timeBlock
   tags
   + view()
-  + regenerate()
 }
 
 class User {

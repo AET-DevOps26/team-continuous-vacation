@@ -28,8 +28,10 @@ class Activity {
 
 enum TimeBlock {
   MORNING
+  NOON
   AFTERNOON
   EVENING
+  NIGHT
 }
 
 enum ActivityTag {
@@ -42,6 +44,7 @@ enum ActivityTag {
   FOOD
   SHOPPING
   FAMILY_FRIENDLY
+  PARTY
 }
 
 class User {
