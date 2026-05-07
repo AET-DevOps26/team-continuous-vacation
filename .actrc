@@ -1,0 +1,3 @@
+-P ubuntu-latest=catthehacker/ubuntu:full-latest
+--container-daemon-socket /var/run/docker.sock
+--container-architecture linux/arm64
