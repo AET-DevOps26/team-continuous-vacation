@@ -1,0 +1,157 @@
+openapi: 3.0.3
+info:
+  title: TripTailor — GenAI API
+  description: >
+    Internal AI generation engine running on port 8000 (Python / FastAPI).
+    Consumed only by the App API. Not exposed to the frontend.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+
+tags:
+  - name: Schedules
+  - name: Activities
+
+paths:
+  /schedules:
+    post:
+      tags: [Schedules]
+      summary: Generate a full multi-day schedule
+      operationId: aiGenerateSchedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerationPreferences"
+      responses:
+        "200":
+          description: Generated schedule.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+
+  /activities/alternative:
+    post:
+      tags: [Activities]
+      summary: Suggest a replacement for a single activity
+      operationId: aiSuggestAlternative
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instruction, activity]
+              properties:
+                instruction:
+                  type: string
+                  example: "Make this an indoor activity"
+                activity:
+                  $ref: "#/components/schemas/Activity"
+      responses:
+        "200":
+          description: Proposed replacement activity.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Activity"
+
+components:
+  schemas:
+    GenerationPreferences:
+      type: object
+      required: [destination, startDate, endDate, vibe]
+      properties:
+        destination:
+          type: string
+          example: "Munich"
+        startDate:
+          type: string
+          format: date
+          example: "2026-05-15"
+        endDate:
+          type: string
+          format: date
+          example: "2026-05-18"
+        vibe:
+          type: string
+          example: "Sporty and active"
+
+    Schedule:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/Day"
+
+    Day:
+      type: object
+      required: [id, dayNumber, date, activities]
+      properties:
+        id:
+          type: string
+          format: uuid
+        dayNumber:
+          type: integer
+          example: 1
+        date:
+          type: string
+          format: date
+          example: "2026-05-15"
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Activity"
+
+    Activity:
+      type: object
+      required: [id, dayId, timeBlock, title, description, durationMinutes]
+      properties:
+        id:
+          type: string
+          format: uuid
+        dayId:
+          type: string
+          format: uuid
+        timeBlock:
+          $ref: "#/components/schemas/TimeBlock"
+        title:
+          type: string
+          example: "Walking tour of the English Garden"
+        description:
+          type: string
+          example: "Explore the vast parklands and enjoy a beer at the Chinese Tower."
+        durationMinutes:
+          type: integer
+          example: 120
+        isIndoor:
+          type: boolean
+          example: false
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityTag"
+          example: [OUTDOOR, CULTURAL]
+
+    TimeBlock:
+      type: string
+      enum: [MORNING, NOON, AFTERNOON, EVENING, NIGHT]
+
+    ActivityTag:
+      type: string
+      enum:
+        - OUTDOOR
+        - INDOOR
+        - CULTURAL
+        - SPORTY
+        - RELAXING
+        - ADVENTUROUS
+        - FOOD
+        - SHOPPING
+        - FAMILY_FRIENDLY
+        - PARTY
