@@ -1,22 +1,26 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import itinerary
+from app.api.routes import itinerary, schedules
 from app.config.settings import settings
 
 app = FastAPI(
-    title="GenAI Service",
-    description="AI-powered itinerary generation service",
+    title="TripTailor — GenAI API",
+    description="Internal AI generation engine. Consumed only by the App API. Not exposed to the frontend.",
     version="1.0.0"
 )
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Configure appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers based on OpenAPI spec
+app.include_router(schedules.router)
+
 
 
 @app.get("/health")
