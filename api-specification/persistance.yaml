@@ -1,0 +1,434 @@
+openapi: 3.0.3
+info:
+  title: TripTailor — Persistence API
+  description: >
+    Internal database access layer running on port 8081.
+    Consumed only by the App API. Not exposed to the frontend.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8081
+
+tags:
+  - name: Travelers
+  - name: Trips
+  - name: Activities
+
+paths:
+  /travelers:
+    post:
+      tags: [Travelers]
+      summary: Persist a new traveler
+      description: >
+        Creates a traveler record. For registered accounts, `email` and
+        `passwordHash` must be provided. For demo accounts, set `isDemo: true`
+        and omit `email` / `passwordHash` — a UUID is generated automatically.
+      operationId: dbCreateTraveler
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TravelerCreateRequest"
+      responses:
+        "201":
+          description: Traveler created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Traveler"
+        "409":
+          description: E-mail already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+    get:
+      tags: [Travelers]
+      summary: Look up a traveler by e-mail
+      description: >
+        Used during login to retrieve the stored record (including
+        `passwordHash`) for credential verification by the App API.
+      operationId: dbFindTravelerByEmail
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+          example: "ada@example.com"
+      responses:
+        "200":
+          description: Matching traveler.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Traveler"
+        "404":
+          description: No traveler with that e-mail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /travelers/{travelerId}:
+    get:
+      tags: [Travelers]
+      summary: Fetch a traveler by UUID
+      operationId: dbGetTraveler
+      parameters:
+        - $ref: "#/components/parameters/TravelerIdPath"
+      responses:
+        "200":
+          description: Traveler record.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Traveler"
+        "404":
+          description: Traveler not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /trips:
+    get:
+      tags: [Trips]
+      summary: Fetch all trips for a traveler
+      operationId: dbListTrips
+      parameters:
+        - $ref: "#/components/parameters/TravelerIdQuery"
+      responses:
+        "200":
+          description: List of trip summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TripSummary"
+
+    post:
+      tags: [Trips]
+      summary: Persist a new trip
+      operationId: dbSaveTrip
+      parameters:
+        - $ref: "#/components/parameters/TravelerIdQuery"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Trip"
+      responses:
+        "201":
+          description: Trip saved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+
+  /trips/{tripId}:
+    get:
+      tags: [Trips]
+      summary: Fetch a full trip by ID
+      operationId: dbGetTrip
+      parameters:
+        - $ref: "#/components/parameters/TripIdPath"
+        - $ref: "#/components/parameters/TravelerIdQuery"
+      responses:
+        "200":
+          description: Full trip record.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+        "404":
+          description: Trip not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+    delete:
+      tags: [Trips]
+      summary: Delete a trip (cascades to days and activities)
+      operationId: dbDeleteTrip
+      parameters:
+        - $ref: "#/components/parameters/TripIdPath"
+        - $ref: "#/components/parameters/TravelerIdQuery"
+      responses:
+        "204":
+          description: Trip and all child records deleted.
+        "404":
+          description: Trip not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /trips/{tripId}/days/{dayId}/activities/{activityId}:
+    put:
+      tags: [Activities]
+      summary: Overwrite an activity record
+      description: Replaces a single activity without resending the whole trip.
+      operationId: dbUpdateActivity
+      parameters:
+        - $ref: "#/components/parameters/TripIdPath"
+        - $ref: "#/components/parameters/DayIdPath"
+        - $ref: "#/components/parameters/ActivityIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Activity"
+      responses:
+        "200":
+          description: Activity updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Activity"
+        "404":
+          description: Trip, day, or activity not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+    delete:
+      tags: [Activities]
+      summary: Delete a single activity record
+      operationId: dbDeleteActivity
+      parameters:
+        - $ref: "#/components/parameters/TripIdPath"
+        - $ref: "#/components/parameters/DayIdPath"
+        - $ref: "#/components/parameters/ActivityIdPath"
+      responses:
+        "204":
+          description: Activity deleted successfully.
+        "404":
+          description: Trip, day, or activity not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+components:
+  parameters:
+    TravelerIdPath:
+      name: travelerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TravelerIdQuery:
+      name: travelerId
+      in: query
+      description: Traveler UUID passed between internal services.
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TripIdPath:
+      name: tripId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DayIdPath:
+      name: dayId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ActivityIdPath:
+      name: activityId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    TravelerCreateRequest:
+      type: object
+      required: [isDemo]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Required when `isDemo` is false.
+          example: "ada@example.com"
+        passwordHash:
+          type: string
+          description: >
+            BCrypt (or equivalent) hash of the password.
+            The App API is responsible for hashing before calling this endpoint.
+            Required when `isDemo` is false.
+          example: "$2b$12$e0NnAbcXyZ..."
+        isDemo:
+          type: boolean
+          description: >
+            When true, `email` and `passwordHash` are ignored.
+            A UUID is generated and returned immediately.
+          example: false
+
+    Traveler:
+      type: object
+      required: [id, isDemo, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        email:
+          type: string
+          format: email
+          description: Absent for demo travelers.
+          example: "ada@example.com"
+        passwordHash:
+          type: string
+          description: >
+            Stored hash. Returned only to the App API for login verification;
+            never forwarded to the frontend.
+          example: "$2b$12$e0NnAbcXyZ..."
+        isDemo:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-05-14T10:30:00Z"
+
+    TripSummary:
+      type: object
+      required: [id, destination, startDate, endDate]
+      properties:
+        id:
+          type: string
+          format: uuid
+        destination:
+          type: string
+          example: "Munich"
+        startDate:
+          type: string
+          format: date
+          example: "2026-05-15"
+        endDate:
+          type: string
+          format: date
+          example: "2026-05-18"
+
+    Trip:
+      allOf:
+        - $ref: "#/components/schemas/TripSummary"
+        - type: object
+          required: [vibe, schedule]
+          properties:
+            vibe:
+              type: string
+              example: "Sporty and active"
+            schedule:
+              $ref: "#/components/schemas/Schedule"
+
+    Schedule:
+      type: object
+      required: [days]
+      properties:
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/Day"
+
+    Day:
+      type: object
+      required: [id, dayNumber, date, activities]
+      properties:
+        id:
+          type: string
+          format: uuid
+        dayNumber:
+          type: integer
+          example: 1
+        date:
+          type: string
+          format: date
+          example: "2026-05-15"
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Activity"
+
+    Activity:
+      type: object
+      required: [id, dayId, timeBlock, title, description, durationMinutes]
+      properties:
+        id:
+          type: string
+          format: uuid
+        dayId:
+          type: string
+          format: uuid
+          description: UUID of the parent Day. Set on creation; read-only thereafter.
+        timeBlock:
+          $ref: "#/components/schemas/TimeBlock"
+        title:
+          type: string
+          example: "Walking tour of the English Garden"
+        description:
+          type: string
+          example: "Explore the vast parklands and enjoy a beer at the Chinese Tower."
+        durationMinutes:
+          type: integer
+          example: 120
+        isIndoor:
+          type: boolean
+          example: false
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityTag"
+          example: [OUTDOOR, CULTURAL]
+
+    TimeBlock:
+      type: string
+      enum: [MORNING, NOON, AFTERNOON, EVENING, NIGHT]
+
+    ActivityTag:
+      type: string
+      enum:
+        - OUTDOOR
+        - INDOOR
+        - CULTURAL
+        - SPORTY
+        - RELAXING
+        - ADVENTUROUS
+        - FOOD
+        - SHOPPING
+        - FAMILY_FRIENDLY
+        - PARTY
+
+    ApiError:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          example: "TRAVELER_NOT_FOUND"
+        title:
+          type: string
+          example: "Traveler Not Found"
+        detail:
+          type: string
+          example: "No traveler with that ID exists."
+        status:
+          type: integer
+          example: 404
