@@ -11,10 +11,85 @@ servers:
   - url: http://localhost:8080
 
 tags:
+  - name: Auth
   - name: Trips
   - name: Activities
 
 paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new traveler account
+      description: >
+        Creates a persistent traveler account with e-mail and password.
+        Returns the traveler UUID to be used as `Traveler-Id` on all
+        subsequent requests.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "409":
+          description: E-mail address already registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with e-mail and password
+      description: >
+        Authenticates an existing traveler and returns their UUID.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/demo:
+    post:
+      tags: [Auth]
+      summary: Create an anonymous demo session
+      description: >
+        Instantly provisions a temporary traveler identity — no e-mail or
+        password required. The returned UUID can be used identically to a
+        registered traveler's UUID. Demo accounts and their trips are
+        eligible for automatic cleanup after a configurable TTL.
+      operationId: createDemoSession
+      responses:
+        "201":
+          description: Demo identity created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
   /trips:
     get:
       tags: [Trips]
@@ -105,8 +180,10 @@ paths:
       tags: [Activities]
       summary: Regenerate a specific activity
       description: >
-        Requests an AI-generated alternative from the GenAI API,
-        then overwrites the record via the Persistence API.
+        Fetches the current full trip from the Persistence API, then calls
+        the GenAI API with the complete trip as context so the replacement
+        activity does not duplicate any existing activity.
+        The new activity is persisted via the Persistence API and returned.
       operationId: regenerateActivity
       parameters:
         - $ref: "#/components/parameters/TripIdPath"
@@ -158,7 +235,7 @@ components:
     TravelerIdHeader:
       name: Traveler-Id
       in: header
-      description: Traveler UUID (authenticated user or generated demo identity).
+      description: Traveler UUID obtained from any /auth endpoint.
       required: true
       schema:
         type: string
@@ -186,6 +263,51 @@ components:
         format: uuid
 
   schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "ada@example.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: "s3cr3tP@ss"
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "ada@example.com"
+        password:
+          type: string
+          format: password
+          example: "s3cr3tP@ss"
+
+    AuthResponse:
+      type: object
+      required: [travelerId, isDemo]
+      properties:
+        travelerId:
+          type: string
+          format: uuid
+          description: >
+            Opaque identity token. Send as the `Traveler-Id` header on
+            every subsequent request.
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        isDemo:
+          type: boolean
+          description: >
+            True for accounts created via POST /auth/demo.
+            Demo accounts may be cleaned up automatically after a TTL.
+          example: false
+
     GenerationPreferences:
       type: object
       required: [destination, startDate, endDate, vibe]
@@ -208,6 +330,10 @@ components:
     RegenerationInstruction:
       type: object
       required: [instruction]
+      description: >
+        The App API automatically attaches the full trip (fetched from the
+        Persistence API) before forwarding to the GenAI API — the frontend
+        only needs to supply the free-text instruction.
       properties:
         instruction:
           type: string
