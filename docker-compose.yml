@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:17-alpine
@@ -25,14 +23,21 @@ services:
     ports:
       - "8080:8080"
     environment:
+      - PERSISTENCE_BASE_URL=http://persistence-service:8081
+    depends_on:
+      persistence-service:
+        condition: service_started
+
+  persistence-service:
+    build:
+      context: ./persistence-service
+    container_name: triptailor-persistence
+    ports:
+      - "8081:8081"
+    environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/triptailor
       - SPRING_DATASOURCE_USERNAME=tripuser
       - SPRING_DATASOURCE_PASSWORD=trippassword
-      # Setting OpenTelemetry Service Name
-      - OTEL_SERVICE_NAME=triptailor-backend
-      - OTEL_METRICS_EXPORTER=none  # Disables metrics export
-      - OTEL_LOGS_EXPORTER=none     # Disables logs export
-      - OTEL_TRACES_EXPORTER=none    # Disables traces export
     depends_on:
       db:
         condition: service_healthy
