@@ -97,8 +97,7 @@ jobs:
           pytest --verbose || echo "No tests found yet"
 
   verify-docker-compose:
-    needs:
-      [build-frontend, build-backend, build-persistence-service, build-genai]
+    needs: [build-frontend, build-backend, build-genai, build-persistence-service]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
