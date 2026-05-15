@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -14,7 +14,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import type { Trip } from "@/providers/data-provider";
 
 const tripSchema = z.object({
@@ -38,7 +38,7 @@ const VIBE_OPTIONS = [
 
 export const TripCreate: React.FC = () => {
   const mutation = useCreate<Trip>();
-  const { show } = useNavigation();
+  const { show, list } = useNavigation();
   const [isPending, setIsPending] = useState(false);
 
   const form = useForm<TripFormValues>({
@@ -60,14 +60,22 @@ export const TripCreate: React.FC = () => {
   };
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
+      <Button variant="ghost" size="sm" className="gap-1.5 -ml-2 mb-4" onClick={() => list("trips")}>
+        <ArrowLeft className="h-4 w-4" />
+        Back
+      </Button>
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Plan a New Trip</CardTitle>
+          <CardTitle className="text-xl">Plan a New Trip</CardTitle>
+          <CardDescription>
+            Describe where and when, pick a vibe, and AI generates your itinerary.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
                 control={form.control}
                 name="destination"
@@ -82,7 +90,7 @@ export const TripCreate: React.FC = () => {
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="startDate"
@@ -118,7 +126,7 @@ export const TripCreate: React.FC = () => {
                   <FormItem>
                     <FormLabel>Vibe</FormLabel>
                     <FormControl>
-                      <div className="space-y-3">
+                      <div className="space-y-2.5">
                         <div className="flex flex-wrap gap-2">
                           {VIBE_OPTIONS.map((vibe) => (
                             <Button
@@ -126,6 +134,7 @@ export const TripCreate: React.FC = () => {
                               type="button"
                               variant={field.value === vibe ? "default" : "outline"}
                               size="sm"
+                              className="text-xs"
                               onClick={() => field.onChange(vibe)}
                             >
                               {vibe}
@@ -136,6 +145,7 @@ export const TripCreate: React.FC = () => {
                           placeholder="Or type your own vibe..."
                           value={VIBE_OPTIONS.includes(field.value) ? "" : field.value}
                           onChange={(e) => field.onChange(e.target.value)}
+                          className="text-sm"
                         />
                       </div>
                     </FormControl>
@@ -144,9 +154,18 @@ export const TripCreate: React.FC = () => {
                 )}
               />
 
-              <Button type="submit" className="w-full" disabled={isPending}>
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isPending ? "Generating itinerary..." : "Generate Trip"}
+              <Button type="submit" className="w-full gap-2" disabled={isPending}>
+                {isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating itinerary...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Generate Trip
+                  </>
+                )}
               </Button>
             </form>
           </Form>

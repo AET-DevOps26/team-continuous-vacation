@@ -211,7 +211,7 @@ function SidebarItemLink({ item, selectedKey }: MenuItemProps) {
 
 function SidebarHeader() {
   const { title } = useRefineOptions();
-  const { open, isMobile } = useShadcnSidebar();
+  const { open } = useShadcnSidebar();
 
   return (
     <ShadcnSidebarHeader
@@ -261,12 +261,7 @@ function SidebarHeader() {
       </div>
 
       <ShadcnSidebarTrigger
-        className={cn("text-muted-foreground", "mr-1.5", {
-          "opacity-0": !open,
-          "opacity-100": open || isMobile,
-          "pointer-events-auto": open || isMobile,
-          "pointer-events-none": !open && !isMobile,
-        })}
+        className={cn("text-muted-foreground", "mr-1.5")}
       />
     </ShadcnSidebarHeader>
   );

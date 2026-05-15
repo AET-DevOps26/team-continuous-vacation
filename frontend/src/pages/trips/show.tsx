@@ -21,6 +21,8 @@ import { useState } from "react";
 
 type TimeBlock = components["schemas"]["TimeBlock"];
 
+const TIME_BLOCK_ORDER: TimeBlock[] = ["MORNING", "NOON", "AFTERNOON", "EVENING", "NIGHT"];
+
 interface TimeBlockDisplay {
   label: string;
   icon: LucideIcon;
@@ -28,21 +30,29 @@ interface TimeBlockDisplay {
 }
 
 const TIME_BLOCK_CONFIG: Record<TimeBlock, TimeBlockDisplay> = {
-  MORNING: { label: "Morning", icon: Sunrise, color: "bg-amber-50 border-amber-200" },
-  NOON: { label: "Noon", icon: Sun, color: "bg-yellow-50 border-yellow-200" },
-  AFTERNOON: { label: "Afternoon", icon: CloudSun, color: "bg-orange-50 border-orange-200" },
-  EVENING: { label: "Evening", icon: Sunset, color: "bg-indigo-50 border-indigo-200" },
-  NIGHT: { label: "Night", icon: Moon, color: "bg-slate-50 border-slate-200" },
+  MORNING: { label: "Morning", icon: Sunrise, color: "bg-amber-100/70 border-amber-300 dark:bg-amber-900/30 dark:border-amber-600/40" },
+  NOON: { label: "Noon", icon: Sun, color: "bg-sky-100/70 border-sky-300 dark:bg-sky-900/30 dark:border-sky-600/40" },
+  AFTERNOON: { label: "Afternoon", icon: CloudSun, color: "bg-orange-100/70 border-orange-300 dark:bg-orange-900/30 dark:border-orange-600/40" },
+  EVENING: { label: "Evening", icon: Sunset, color: "bg-violet-100/70 border-violet-300 dark:bg-violet-900/30 dark:border-violet-600/40" },
+  NIGHT: { label: "Night", icon: Moon, color: "bg-slate-200/70 border-slate-300 dark:bg-slate-800/40 dark:border-slate-600/40" },
 };
+
+function sortActivities(activities: Activity[]): Activity[] {
+  return [...activities].sort(
+    (a, b) => TIME_BLOCK_ORDER.indexOf(a.timeBlock) - TIME_BLOCK_ORDER.indexOf(b.timeBlock)
+  );
+}
 
 function ActivityCard({
   activity,
   tripId,
   dayId,
+  onMutate,
 }: {
   activity: Activity;
   tripId: string;
   dayId: string;
+  onMutate: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [instruction, setInstruction] = useState("");
@@ -62,68 +72,79 @@ function ActivityCard({
         id: activity.id,
         values: { instruction },
         meta: { tripId, dayId },
+        invalidates: [],
       },
       {
         onSuccess: () => {
           setEditing(false);
           setInstruction("");
+          onMutate();
         },
         onSettled: () => setRegenerating(false),
       }
     );
   };
 
+  const handleDelete = () => {
+    deleteActivity(
+      {
+        resource: "activities",
+        id: activity.id,
+        meta: { tripId, dayId },
+        invalidates: [],
+      },
+      { onSuccess: onMutate }
+    );
+  };
+
   return (
-    <Card className={`${config.color} border`}>
+    <Card className={`${config.color} border transition-colors`}>
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <Icon className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground uppercase">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 {config.label}
               </span>
+              <span className="text-xs text-muted-foreground/70">·</span>
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Clock className="h-3 w-3" />
                 {activity.durationMinutes} min
               </div>
             </div>
-            <h4 className="font-semibold">{activity.title}</h4>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h4 className="font-semibold leading-tight">{activity.title}</h4>
+            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
               {activity.description}
             </p>
             {activity.tags && activity.tags.length > 0 && (
-              <div className="flex gap-1 mt-2 flex-wrap">
+              <div className="flex gap-1.5 mt-2.5 flex-wrap">
                 {activity.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-xs">
+                  <Badge key={tag} variant="secondary" className="text-xs font-normal">
                     {tag.toLowerCase().replace("_", " ")}
                   </Badge>
                 ))}
               </div>
             )}
           </div>
-          <div className="flex gap-1">
+          <div className="flex flex-col gap-1 shrink-0">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-8 w-8"
+              title="Regenerate activity"
               onClick={() => setEditing(!editing)}
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              onClick={() =>
-                deleteActivity({
-                  resource: "activities",
-                  id: activity.id,
-                  meta: { tripId, dayId },
-                })
-              }
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              title="Delete activity"
+              onClick={handleDelete}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -135,6 +156,7 @@ function ActivityCard({
               onChange={(e) => setInstruction(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleRegenerate()}
               disabled={regenerating}
+              className="text-sm"
             />
             <Button
               size="sm"
@@ -155,6 +177,10 @@ export const TripShow: React.FC = () => {
   const { list } = useNavigation();
   const trip = query?.data?.data;
 
+  const refetchTrip = () => {
+    query.refetch();
+  };
+
   if (query?.isLoading) {
     return (
       <div className="p-8 text-center">
@@ -169,36 +195,41 @@ export const TripShow: React.FC = () => {
     );
   }
 
+  const totalDays = trip.schedule.days.length;
+
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <Button variant="ghost" className="gap-2 mb-4" onClick={() => list("trips")}>
+    <div className="p-4 sm:p-6 lg:p-8">
+      {/* Header */}
+      <div className="mb-8">
+        <Button variant="ghost" size="sm" className="gap-1.5 -ml-2 mb-3" onClick={() => list("trips")}>
           <ArrowLeft className="h-4 w-4" />
-          Back to trips
+          Back
         </Button>
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-3xl font-bold">{trip.destination}</h1>
-          <Badge variant="outline">{trip.vibe}</Badge>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{trip.destination}</h1>
+          <Badge variant="outline" className="w-fit">{trip.vibe}</Badge>
         </div>
-        <p className="text-muted-foreground mt-1">
-          {trip.startDate} — {trip.endDate}
+        <p className="text-sm text-muted-foreground mt-1.5">
+          {trip.startDate} — {trip.endDate} · {totalDays} {totalDays === 1 ? "day" : "days"}
         </p>
       </div>
 
-      <div className="space-y-8">
+      {/* Schedule Grid */}
+      <div className="grid gap-6 lg:gap-8 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {trip.schedule.days.map((day) => (
-          <div key={day.id}>
-            <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-xl font-semibold">Day {day.dayNumber}</h2>
-              <span className="text-sm text-muted-foreground">{day.date}</span>
+          <div key={day.id} className="space-y-3">
+            <div className="flex items-baseline gap-2 pb-2 border-b">
+              <h2 className="text-lg font-semibold">Day {day.dayNumber}</h2>
+              <span className="text-xs text-muted-foreground">{day.date}</span>
             </div>
-            <div className="grid gap-3">
-              {day.activities.map((activity) => (
+            <div className="space-y-2.5">
+              {sortActivities(day.activities).map((activity) => (
                 <ActivityCard
                   key={activity.id}
                   activity={activity}
                   tripId={trip.id}
                   dayId={day.id}
+                  onMutate={refetchTrip}
                 />
               ))}
             </div>

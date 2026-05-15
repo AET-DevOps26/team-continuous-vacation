@@ -1,6 +1,6 @@
 # TripTailor Frontend
 
-React 19 + Vite + [Refine](https://refine.dev) application with shadcn/ui components and Tailwind CSS.
+React 19 + Vite + [Refine](https://refine.dev) application with shadcn/ui components and Tailwind CSS 4.
 
 ## Architecture
 
@@ -14,24 +14,33 @@ src/
 │   ├── auth-provider.ts   # Refine AuthProvider (login, register, demo session)
 │   └── data-provider.ts   # Refine DataProvider mapped to /trips & /activities API
 ├── pages/
-│   ├── login/index.tsx    # Login page with demo session button
+│   ├── login/index.tsx    # Auth page (login, register, demo) with mode toggle
 │   └── trips/
-│       ├── list.tsx       # Trip dashboard (card grid, delete)
-│       ├── create.tsx     # Trip generation form (destination, dates, vibe)
-│       └── show.tsx       # Visual schedule view with activity regeneration
+│       ├── list.tsx       # Trip dashboard (responsive card grid, delete)
+│       ├── create.tsx     # Trip generation form (destination, dates, vibe picker)
+│       └── show.tsx       # Visual schedule with time-block colors, activity regeneration & delete
 ├── components/
-│   ├── ui/                # shadcn/ui primitives (button, card, input, etc.)
-│   └── refine-ui/         # Refine layout, notifications, theme
+│   ├── ui/                # shadcn/ui primitives (button, card, input, sidebar, etc.)
+│   └── refine-ui/         # Layout (sidebar, header, theme toggle, user dropdown)
 ├── test/                  # Vitest setup and test utilities
-└── App.tsx                # Root with routing and Authenticated guards
+└── App.tsx                # Root with BrowserRouter, Authenticated guards, route config
 ```
 
-## How It Was Built
+## API Coverage
 
-1. **Type generation**: `openapi-typescript` generates `api-types.ts` from `api-specification/frontend.yaml`
-2. **API client**: `openapi-fetch` provides a fully typed HTTP client — requests and responses are validated against the OpenAPI schema at compile time
-3. **Refine framework**: Provides data-fetching hooks (`useList`, `useShow`, `useCreate`, `useUpdate`, `useDelete`), auth guards, routing, and notifications out of the box
-4. **UI**: shadcn/ui components (Radix primitives + Tailwind CSS)
+All endpoints from `api-specification/frontend.yaml` are implemented:
+
+| Endpoint | Method | Usage |
+|----------|--------|-------|
+| `/auth/register` | POST | Register form on login page |
+| `/auth/login` | POST | Login form on login page |
+| `/auth/demo` | POST | "Try Demo" button on login page |
+| `/trips` | GET | Trip list page |
+| `/trips` | POST | Trip creation form |
+| `/trips/{tripId}` | GET | Trip detail/schedule page |
+| `/trips/{tripId}` | DELETE | Delete button on trip cards |
+| `/trips/{tripId}/days/{dayId}/activities/{activityId}` | PATCH | Regenerate activity with instruction |
+| `/trips/{tripId}/days/{dayId}/activities/{activityId}` | DELETE | Delete activity button |
 
 ## Commands
 
@@ -41,14 +50,17 @@ npm run dev                       # Start dev server (Vite on port 5173)
 npm run build                     # TypeScript check + production build
 npm run lint                      # ESLint
 npm run test                      # Vitest (unit + component tests)
+npm run test:watch                # Vitest in watch mode
 npm run generate-api-types        # Regenerate types from OpenAPI spec
 ```
 
 ## Environment Variables
 
-| Variable       | Default                  | Description                  |
-|----------------|--------------------------|------------------------------|
-| `VITE_API_URL` | `http://localhost:8080`  | Backend API base URL         |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | `""` (empty, uses relative paths) | Backend API base URL |
+
+In development, Vite proxies `/auth`, `/trips`, and `/health` to `http://localhost:8080`.
 
 ## Docker
 
@@ -57,13 +69,22 @@ docker build -t triptailor-frontend .
 docker run -p 3000:3000 triptailor-frontend
 ```
 
-The Dockerfile uses a multi-stage build (node:20-alpine) to compile and then serves the SPA with `serve`.
+Multi-stage build: `node:20-alpine` compiles the SPA, then `serve` serves static files on port 3000. Pass `--build-arg VITE_API_URL=...` to set the API URL at build time.
 
 ## Testing
 
-Tests use **Vitest** + **React Testing Library** + **jsdom**. Test files are co-located with source (`*.test.ts` / `*.test.tsx`) and excluded from the production TypeScript compilation.
+Tests use **Vitest** + **React Testing Library** + **jsdom**.
+
+Test files are co-located with source (`*.test.ts` / `*.test.tsx`) and excluded from production TypeScript compilation via `tsconfig.json`.
 
 ```bash
-npm run test          # Single run
-npm run test:watch    # Watch mode
+npm run test          # Single run (used in CI)
+npm run test:watch    # Watch mode for development
 ```
+
+## Design
+
+- **Color palette**: Slate-blue tinted (oklch hue 260) with indigo primary. Clean in both light and dark modes.
+- **Activity cards**: Time-block coloring (amber/sky/orange/violet/slate) with good contrast in both themes.
+- **Layout**: Full-width content with collapsible sidebar. Sidebar can be reopened via header trigger.
+- **Responsive**: Grids adapt from 1 to 5 columns depending on viewport width.
