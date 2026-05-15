@@ -12,7 +12,6 @@ class Trip {
 class Day {
   date
   + view()
-  + regenerateActivity()
 }
 
 class Activity {
@@ -22,6 +21,7 @@ class Activity {
   timeBlock
   tags
   + view()
+  + regenerate()
 }
 
 class User {
@@ -30,23 +30,18 @@ class User {
   + editActivity()
 }
 
-' Necessary?
-' ==========
 class GenAIService {
   + generateItinerary()
   + regenerateActivity()
 }
 
-Activity ..> GenAIService : uses
-Trip ..> GenAIService : uses
-' =========
-
-
-
 Trip "1" -- "*" Day
-Day "*" -- "*" Activity
+Day "1" -- "*" Activity
 
 User ..> Trip : creates/views
 User ..> Activity : edits/regenerates
+
+Trip ..> GenAIService : uses
+Activity ..> GenAIService : uses
 
 @enduml
