@@ -1,7 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import itinerary, schedules
 from app.config.settings import settings
+from app.models.schemas import (
+    GenerationPreferences,
+    Schedule,
+    AlternativeActivityRequest,
+    Activity
+)
+from app.services.schedule_service import ScheduleService
 
 app = FastAPI(
     title="TripTailor — GenAI API",
@@ -18,9 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers based on OpenAPI spec
-app.include_router(schedules.router)
-
+schedule_service = ScheduleService()
 
 
 @app.get("/health")
@@ -37,3 +41,23 @@ async def root():
         "version": "1.0.0",
         "status": "running"
     }
+
+
+@app.post("/schedules", response_model=Schedule, tags=["Schedules"])
+async def generate_schedule(preferences: GenerationPreferences):
+    """Generate a full multi-day schedule"""
+    try:
+        schedule = await schedule_service.generate_schedule(preferences)
+        return schedule
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate schedule: {str(e)}")
+
+
+@app.post("/activities/alternative", response_model=Activity, tags=["Activities"])
+async def suggest_alternative_activity(request: AlternativeActivityRequest):
+    """Suggest a replacement for a single activity"""
+    try:
+        alternative = await schedule_service.suggest_alternative(request)
+        return alternative
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to suggest alternative: {str(e)}")
