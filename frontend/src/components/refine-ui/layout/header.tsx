@@ -4,12 +4,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
   useActiveAuthProvider,
+  useGetIdentity,
   useLogout,
   useRefineOptions,
 } from "@refinedev/core";
@@ -22,6 +25,8 @@ export const Header = () => {
 };
 
 function DesktopHeader() {
+  const { open } = useSidebar();
+
   return (
     <header
       className={cn(
@@ -34,14 +39,22 @@ function DesktopHeader() {
         "gap-4",
         "border-b",
         "border-border",
-        "bg-sidebar",
-        "pr-3",
-        "justify-end",
+        "bg-background",
+        "px-4",
+        "justify-between",
         "z-40"
       )}
     >
-      <ThemeToggle />
-      <UserDropdown />
+      <SidebarTrigger
+        className={cn("text-muted-foreground transition-opacity", {
+          "opacity-0 pointer-events-none": open,
+          "opacity-100": !open,
+        })}
+      />
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <UserDropdown />
+      </div>
     </header>
   );
 }
@@ -119,7 +132,7 @@ function MobileHeader() {
 
 const UserDropdown = () => {
   const { mutate: logout, isPending: isLoggingOut } = useLogout();
-
+  const { data: user } = useGetIdentity<{ id: string; name: string }>();
   const authProvider = useActiveAuthProvider();
 
   if (!authProvider?.getIdentity) {
@@ -128,21 +141,25 @@ const UserDropdown = () => {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
+      <DropdownMenuTrigger className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <UserAvatar />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="w-48">
+        {user && (
+          <>
+            <DropdownMenuLabel className="font-normal">
+              <p className="text-sm font-medium">{user.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{user.id.slice(0, 8)}...</p>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem
-          onClick={() => {
-            logout();
-          }}
+          onClick={() => logout()}
+          className="text-destructive focus:text-destructive focus:bg-destructive/10"
         >
-          <LogOutIcon
-            className={cn("text-destructive", "hover:text-destructive")}
-          />
-          <span className={cn("text-destructive", "hover:text-destructive")}>
-            {isLoggingOut ? "Logging out..." : "Logout"}
-          </span>
+          <LogOutIcon className="h-4 w-4 mr-2" />
+          {isLoggingOut ? "Logging out..." : "Log out"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
