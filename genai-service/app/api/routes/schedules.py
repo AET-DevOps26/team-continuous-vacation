@@ -37,8 +37,11 @@ async def generate_schedule(
         return schedule
     except ScheduleGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Failed to generate schedule")
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate schedule: {str(e)}",
+        )
 
 
 @router.post("/activities/alternative", response_model=Activity, tags=["Activities"])

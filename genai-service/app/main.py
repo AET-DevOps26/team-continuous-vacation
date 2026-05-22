@@ -1,7 +1,15 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import schedules
+from app.config.settings import settings
+
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    format="%(levelname)s:%(name)s:%(message)s",
+)
 
 app = FastAPI(
     title="TripTailor — GenAI API",

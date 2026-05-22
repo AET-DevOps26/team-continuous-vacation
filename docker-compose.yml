@@ -50,12 +50,13 @@ services:
     container_name: triptailor-genai
     ports:
       - "8000:8000"
+    env_file:
+      - ./genai-service/.env.example
+      - ./genai-service/.env
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MODEL_NAME=${MODEL_NAME:-gpt-4}
-      - TEMPERATURE=${TEMPERATURE:-0.7}
-      - MAX_TOKENS=${MAX_TOKENS:-2000}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - AZURE_LLM_API_KEY_FILE=/run/secrets/azure_llm_api_key
+    secrets:
+      - azure_llm_api_key
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -74,3 +75,7 @@ services:
 
 volumes:
   pgdata:
+
+secrets:
+  azure_llm_api_key:
+    file: ./genai-service/.secrets/azure_llm_api_key
