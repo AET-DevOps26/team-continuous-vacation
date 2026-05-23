@@ -81,6 +81,7 @@ enum class ActivityTag {
 	ADVENTUROUS,
 	FOOD,
 	SHOPPING,
+	ENTERTAINMENT,
 	FAMILY_FRIENDLY,
 	PARTY,
 }

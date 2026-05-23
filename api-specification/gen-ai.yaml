@@ -32,6 +32,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Schedule"
+        "502":
+          description: >
+            The upstream model returned output that could not be validated
+            against the expected itinerary contract.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Unexpected internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /activities/alternative:
     post:
@@ -57,9 +71,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Activity"
+        "502":
+          description: >
+            The upstream model returned output that could not be validated
+            against the expected activity contract.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Unexpected internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          example: "Generated schedule did not match the expected format"
+
     GenerationPreferences:
       type: object
       required: [destination, startDate, endDate, vibe]
@@ -198,5 +234,6 @@ components:
         - ADVENTUROUS
         - FOOD
         - SHOPPING
+        - ENTERTAINMENT
         - FAMILY_FRIENDLY
         - PARTY
