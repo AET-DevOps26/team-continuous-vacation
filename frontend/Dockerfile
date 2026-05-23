@@ -2,9 +2,6 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-ARG VITE_API_URL=http://localhost:8080
-ENV VITE_API_URL=${VITE_API_URL}
-
 COPY package.json package-lock.json* ./
 
 RUN npm install --legacy-peer-deps
@@ -13,14 +10,12 @@ COPY . .
 
 RUN npm run build
 
-# Stage 2: Serve the application
-FROM node:20-alpine AS runner
-WORKDIR /app
+# Stage 2: Serve with nginx (also reverse-proxies API routes to backend)
+FROM nginx:alpine AS runner
 
-RUN npm install -g serve
-
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 3000
 
-CMD ["serve", "-s", "dist", "-l", "3000"]
+CMD ["nginx", "-g", "daemon off;"]

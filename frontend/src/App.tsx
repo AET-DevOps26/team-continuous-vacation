@@ -46,6 +46,7 @@ function App() {
                 },
               ]}
               options={{
+                disableTelemetry: true,
                 syncWithLocation: true,
                 warnWhenUnsavedChanges: true,
                 projectId: "qdhLQQ-U2XN2x-I0Avkx",

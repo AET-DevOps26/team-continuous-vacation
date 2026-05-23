@@ -13,9 +13,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/auth": "http://localhost:8080",
-      "/trips": "http://localhost:8080",
-      "/health": "http://localhost:8080",
+      "/api": {
+        target: "http://localhost:8080",
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
     },
   },
 });

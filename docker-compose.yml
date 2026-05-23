@@ -19,6 +19,8 @@ services:
   backend:
     build:
       context: ./backend
+      additional_contexts:
+        api-spec: ./api-specification
     container_name: triptailor-backend
     ports:
       - "8080:8080"
@@ -31,6 +33,8 @@ services:
   persistence-service:
     build:
       context: ./persistence-service
+      additional_contexts:
+        api-spec: ./api-specification
     container_name: triptailor-persistence
     ports:
       - "8081:8081"
@@ -63,6 +67,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      additional_contexts:
+        api-spec: ./api-specification
     container_name: triptailor-frontend
     ports:
       - "3000:3000"

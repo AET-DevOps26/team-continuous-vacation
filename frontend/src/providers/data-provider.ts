@@ -110,5 +110,5 @@ export const dataProvider = {
     throw new Error(`Unknown resource: ${resource}`);
   },
 
-  getApiUrl: () => import.meta.env.VITE_API_URL ?? "",
+  getApiUrl: () => import.meta.env.VITE_API_URL ?? "/api",
 } as unknown as DataProvider;
