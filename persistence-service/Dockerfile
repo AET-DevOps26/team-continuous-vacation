@@ -1,16 +1,23 @@
-FROM eclipse-temurin:21-jdk-alpine AS builder
-WORKDIR /app
+# syntax=docker/dockerfile:1.7
+
+FROM eclipse-temurin:21-jdk-alpine AS deps
+WORKDIR /workspace
 COPY gradlew .
 COPY gradle gradle
-COPY build.gradle.kts .
-COPY settings.gradle.kts .
-RUN ./gradlew dependencies --no-daemon
+COPY build.gradle.kts settings.gradle.kts ./
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+	chmod +x gradlew && \
+	./gradlew dependencies --no-daemon
 
+FROM deps AS build
 COPY src src
-RUN ./gradlew bootJar --no-daemon -x test
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+	./gradlew bootJar --no-daemon -x test
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
-COPY --from=builder /app/build/libs/*-SNAPSHOT.jar app.jar
+RUN addgroup -S app && adduser -S app -G app
+COPY --from=build --chown=app:app /workspace/build/libs/*-SNAPSHOT.jar app.jar
+USER app
 EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "app.jar"]
