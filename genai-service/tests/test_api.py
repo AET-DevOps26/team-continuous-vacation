@@ -31,7 +31,7 @@ class FakeLLMProvider:
                   "description": "Start the trip with a scenic active route through Munich's largest park.",
                   "durationMinutes": 90,
                   "isIndoor": false,
-                  "tags": ["SPORTY", "OUTDOOR"]
+                  "tags": ["SPORTY", "ENTERTAINMENT", "SURPRISE_ME"]
                 },
                 {
                   "timeBlock": "AFTERNOON",
@@ -205,6 +205,8 @@ def test_generate_schedule():
         assert "title" in activity
         assert "description" in activity
         assert "durationMinutes" in activity
+        assert "ENTERTAINMENT" in activity["tags"]
+        assert "SURPRISE_ME" not in activity["tags"]
 
 
 def test_suggest_alternative_activity():

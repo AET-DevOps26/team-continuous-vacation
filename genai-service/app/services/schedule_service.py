@@ -5,13 +5,14 @@ Service for AI-powered schedule generation based on OpenAPI specification
 import logging
 import json
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
 from app.models.schemas import (
     Activity,
+    ActivityTag,
     AlternativeActivityRequest,
     Day,
     GeneratedActivity,
@@ -79,6 +80,7 @@ class ScheduleService:
 
         try:
             parsed_json = self._load_json(response_text, "schedule")
+            self._sanitize_schedule_tags(parsed_json)
             logger.debug("Schedule LLM parsed JSON: %s", parsed_json)
             parsed_schedule = GeneratedSchedule.model_validate(parsed_json)
             self._validate_schedule_contract(parsed_schedule, preferences)
@@ -131,6 +133,7 @@ class ScheduleService:
 
         try:
             parsed_json = self._load_json(response_text, "alternative activity")
+            self._sanitize_activity_tags(parsed_json, "alternative activity")
             logger.debug("Alternative activity LLM parsed JSON: %s", parsed_json)
             activity_data = GeneratedActivity.model_validate(parsed_json)
             self._validate_alternative_contract(activity_data, request)
@@ -192,6 +195,77 @@ class ScheduleService:
             cleaned,
         )
         return json.loads(cleaned)
+
+    def _sanitize_schedule_tags(self, schedule_data: dict[str, Any]) -> None:
+        days = schedule_data.get("days")
+        if not isinstance(days, list):
+            return
+
+        for day_index, day in enumerate(days):
+            if not isinstance(day, dict):
+                continue
+
+            activities = day.get("activities")
+            if not isinstance(activities, list):
+                continue
+
+            for activity_index, activity in enumerate(activities):
+                self._sanitize_activity_tags(
+                    activity,
+                    f"schedule day {day_index + 1} activity {activity_index + 1}",
+                )
+
+    def _sanitize_activity_tags(
+        self,
+        activity_data: Any,
+        location: str,
+    ) -> None:
+        if not isinstance(activity_data, dict):
+            return
+
+        tags = activity_data.get("tags")
+        if tags is None:
+            activity_data["tags"] = []
+            return
+        if not isinstance(tags, list):
+            logger.warning(
+                "Dropping invalid LLM tags field at %s because it was not a list: %r",
+                location,
+                tags,
+            )
+            activity_data["tags"] = []
+            return
+
+        allowed_tags = {tag.value for tag in ActivityTag}
+        sanitized_tags = []
+        dropped_tags = []
+        for raw_tag in tags:
+            normalized_tag = self._normalize_tag_value(raw_tag)
+            if normalized_tag in allowed_tags:
+                if normalized_tag not in sanitized_tags:
+                    sanitized_tags.append(normalized_tag)
+            else:
+                dropped_tags.append(raw_tag)
+
+        if dropped_tags:
+            logger.warning(
+                "Dropping unsupported LLM activity tags at %s: %r",
+                location,
+                dropped_tags,
+            )
+        if sanitized_tags != tags:
+            logger.debug(
+                "Sanitized LLM activity tags at %s from %r to %r",
+                location,
+                tags,
+                sanitized_tags,
+            )
+        activity_data["tags"] = sanitized_tags
+
+    def _normalize_tag_value(self, raw_tag: Any) -> str:
+        if not isinstance(raw_tag, str):
+            return ""
+        return raw_tag.strip().upper().replace("-", "_").replace(" ", "_")
 
     def _validate_schedule_contract(
         self,

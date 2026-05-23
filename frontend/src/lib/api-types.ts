@@ -287,7 +287,7 @@ export interface components {
         /** @enum {string} */
         TimeBlock: "MORNING" | "NOON" | "AFTERNOON" | "EVENING" | "NIGHT";
         /** @enum {string} */
-        ActivityTag: "OUTDOOR" | "INDOOR" | "CULTURAL" | "SPORTY" | "RELAXING" | "ADVENTUROUS" | "FOOD" | "SHOPPING" | "FAMILY_FRIENDLY" | "PARTY";
+        ActivityTag: "OUTDOOR" | "INDOOR" | "CULTURAL" | "SPORTY" | "RELAXING" | "ADVENTUROUS" | "FOOD" | "SHOPPING" | "ENTERTAINMENT" | "FAMILY_FRIENDLY" | "PARTY";
         ApiError: {
             /** @example TRIP_NOT_FOUND */
             type: string;
