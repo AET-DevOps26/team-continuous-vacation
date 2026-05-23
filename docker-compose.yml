@@ -63,6 +63,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      additional_contexts:
+        api-spec: ./api-specification
     container_name: triptailor-frontend
     ports:
       - "3000:3000"

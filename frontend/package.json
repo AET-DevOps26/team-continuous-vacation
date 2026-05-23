@@ -97,6 +97,7 @@
   },
   "scripts": {
     "dev": "refine dev",
+    "prebuild": "npm run generate-api-types",
     "build": "tsc && refine build",
     "start": "refine start",
     "refine": "refine",

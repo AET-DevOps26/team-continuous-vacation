@@ -37,6 +37,9 @@ gradle-app.setting
 **/out/
 **/bin/
 
+# Generated API types
+frontend/src/lib/api-types.ts
+
 # =========================
 # Frontend (Node / Vite / Refine)
 # =========================
