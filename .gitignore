@@ -37,6 +37,10 @@ gradle-app.setting
 **/out/
 **/bin/
 
+# OpenAPI specs copied from api-specification/ by Gradle
+backend/src/main/resources/openapi.yaml
+persistence-service/src/main/resources/openapi.yaml
+
 # =========================
 # Frontend (Node / Vite / Refine)
 # =========================
