@@ -53,10 +53,6 @@ services:
     env_file:
       - ./genai-service/.env.example
       - ./genai-service/.env
-    environment:
-      - AZURE_LLM_API_KEY_FILE=/run/secrets/azure_llm_api_key
-    secrets:
-      - azure_llm_api_key
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -75,7 +71,3 @@ services:
 
 volumes:
   pgdata:
-
-secrets:
-  azure_llm_api_key:
-    file: ./genai-service/.secrets/azure_llm_api_key
