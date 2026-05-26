@@ -11,6 +11,7 @@ RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
 
 FROM deps AS build
 COPY src src
+COPY --from=api-spec frontend.yaml src/main/resources/openapi.yaml
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
 	./gradlew bootJar --no-daemon -x test
 

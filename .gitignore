@@ -35,10 +35,11 @@ gradle-app.setting
 # Ignore build artifacts at any depth
 **/build/
 **/out/
-**/bin/
+**/bin/ 
 
-# Generated API types
-frontend/src/lib/api-types.ts
+# OpenAPI specs copied from api-specification/ by Gradle
+backend/src/main/resources/openapi.yaml
+persistence-service/src/main/resources/openapi.yaml
 
 # =========================
 # Frontend (Node / Vite / Refine)
@@ -49,6 +50,9 @@ dist/
 dist-ssr/
 .eslintcache
 .stylelintcache
+
+# Generated API types
+frontend/src/lib/api-types.ts
 
 # Logs
 *.log
