@@ -49,6 +49,16 @@ kotlin {
 	}
 }
 
+val copyOpenApiSpec by tasks.registering(Copy::class) {
+	from("${rootProject.projectDir}/../api-specification/frontend.yaml")
+	into(layout.projectDirectory.dir("src/main/resources"))
+	rename { "openapi.yaml" }
+}
+
+tasks.processResources {
+	dependsOn(copyOpenApiSpec)
+}
+
 tasks.withType<Test> {
 	useJUnitPlatform()
 }
