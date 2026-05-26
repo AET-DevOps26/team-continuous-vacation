@@ -1,0 +1,7 @@
+global:
+  imagePullPolicy: IfNotPresent
+
+frontend:
+  service:
+    type: NodePort
+    nodePort: 30080

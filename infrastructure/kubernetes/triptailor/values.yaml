@@ -1,0 +1,95 @@
+global:
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 17-alpine
+  service:
+    name: db
+    port: 5432
+  auth:
+    database: triptailor
+    username: tripuser
+    password: trippassword
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: ""
+  resources: {}
+
+persistenceService:
+  image:
+    repository: triptailor/persistence-service
+    tag: latest
+  service:
+    name: persistence-service
+    port: 8081
+  replicaCount: 1
+  resources: {}
+
+genaiService:
+  image:
+    repository: triptailor/genai-service
+    tag: latest
+  service:
+    name: genai-service
+    port: 8000
+  replicaCount: 1
+  config:
+    LLM_PROVIDER: local
+    AZURE_LLM_BASE_URL: https://example.invalid/
+    AZURE_LLM_API_VERSION: 2024-12-01-preview
+    MODEL_NAME: gpt-5-nano
+    TEMPERATURE: "0.7"
+    MAX_TOKENS: "8000"
+    LOCAL_LLM_API_KEY: ollama
+    LOCAL_LLM_BASE_URL: http://localhost:11434/v1
+    LOG_LEVEL: INFO
+  secrets:
+    AZURE_LLM_API_KEY: ""
+  resources: {}
+
+backend:
+  image:
+    repository: triptailor/backend
+    tag: latest
+  service:
+    name: backend
+    type: ClusterIP
+    port: 8080
+  replicaCount: 1
+  config:
+    JWT_ISSUER: triptailor-app-api
+    JWT_TTL_DAYS: "30"
+  secrets:
+    JWT_SECRET: dev-only-change-this-secret-to-at-least-32-bytes
+  resources: {}
+
+frontend:
+  image:
+    repository: triptailor/frontend
+    tag: latest
+  service:
+    name: frontend
+    type: ClusterIP
+    port: 3000
+    nodePort: null
+  replicaCount: 1
+  resources: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: triptailor.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
