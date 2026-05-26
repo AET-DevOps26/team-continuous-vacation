@@ -48,6 +48,11 @@ spec:
                 configMapKeyRef:
                   name: {{ include "triptailor.fullname" . }}-config
                   key: PERSISTENCE_BASE_URL
+            - name: GENAI_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "triptailor.fullname" . }}-config
+                  key: GENAI_BASE_URL
             - name: JWT_ISSUER
               valueFrom:
                 configMapKeyRef:

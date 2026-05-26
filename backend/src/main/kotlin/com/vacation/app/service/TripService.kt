@@ -6,6 +6,7 @@ import com.vacation.app.api.GenerationPreferences
 import com.vacation.app.api.RegenerationInstruction
 import com.vacation.app.api.Trip
 import com.vacation.app.api.TripSummary
+import com.vacation.app.client.GenAiClient
 import com.vacation.app.client.PersistenceClient
 import org.springframework.stereotype.Service
 import java.util.UUID
@@ -13,7 +14,7 @@ import java.util.UUID
 @Service
 class TripService(
 	private val persistenceClient: PersistenceClient,
-	private val itineraryGenerator: ItineraryGenerator,
+	private val genAiClient: GenAiClient,
 ) {
 	fun listTrips(travelerId: UUID): List<TripSummary> = persistenceClient.listTrips(travelerId)
 
@@ -21,7 +22,15 @@ class TripService(
 		if (preferences.endDate.isBefore(preferences.startDate)) {
 			throw ApiException(400, "INVALID_DATES", "Invalid Dates", "endDate must be on or after startDate.")
 		}
-		return persistenceClient.saveTrip(travelerId, itineraryGenerator.generate(preferences))
+		val trip = Trip(
+			id = UUID.randomUUID(),
+			destination = preferences.destination,
+			startDate = preferences.startDate,
+			endDate = preferences.endDate,
+			vibe = preferences.vibe,
+			schedule = genAiClient.generateSchedule(preferences),
+		)
+		return persistenceClient.saveTrip(travelerId, trip)
 	}
 
 	fun getTrip(travelerId: UUID, tripId: UUID): Trip = persistenceClient.getTrip(travelerId, tripId)
@@ -42,7 +51,7 @@ class TripService(
 			?.firstOrNull { it.id == activityId }
 			?: throw ApiException(404, "ACTIVITY_NOT_FOUND", "Activity Not Found")
 
-		val replacement = itineraryGenerator.regenerate(activity, instruction).copy(dayId = dayId)
+		val replacement = genAiClient.suggestAlternative(instruction, activity, trip).copy(dayId = dayId)
 		return persistenceClient.updateActivity(tripId, dayId, activityId, replacement)
 	}
 

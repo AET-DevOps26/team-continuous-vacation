@@ -6,6 +6,7 @@ metadata:
     {{- include "triptailor.labels" . | nindent 4 }}
 data:
   PERSISTENCE_BASE_URL: "http://{{ .Values.persistenceService.service.name }}:{{ .Values.persistenceService.service.port }}"
+  GENAI_BASE_URL: "http://{{ .Values.genaiService.service.name }}:{{ .Values.genaiService.service.port }}"
   SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ .Values.postgres.service.name }}:{{ .Values.postgres.service.port }}/{{ .Values.postgres.auth.database }}"
   SPRING_DATASOURCE_USERNAME: {{ .Values.postgres.auth.username | quote }}
   JWT_ISSUER: {{ .Values.backend.config.JWT_ISSUER | quote }}

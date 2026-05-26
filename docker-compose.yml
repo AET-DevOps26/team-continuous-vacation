@@ -26,9 +26,12 @@ services:
       - "8080:8080"
     environment:
       - PERSISTENCE_BASE_URL=http://persistence-service:8081
+      - GENAI_BASE_URL=http://genai-service:8000
     depends_on:
       persistence-service:
         condition: service_started
+      genai-service:
+        condition: service_healthy
 
   persistence-service:
     build:
