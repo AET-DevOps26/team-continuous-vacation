@@ -1,0 +1,84 @@
+---
+- name: Deploy TripTailor to Azure VM
+  hosts: triptailor
+  become: true
+  vars:
+    app_dir: /opt/triptailor
+    repo_url: "https://github.com/AET-DevOps26/team-continuous-vacation.git"
+    branch: main
+
+  tasks:
+    - name: Install prerequisites
+      apt:
+        name: [apt-transport-https, ca-certificates, curl, gnupg, lsb-release, git]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Add Docker GPG key
+      shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+      args:
+        creates: /etc/apt/keyrings/docker.asc
+
+    - name: Add Docker repository
+      shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo ${VERSION_CODENAME}) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Install Docker
+      apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin]
+        state: present
+        update_cache: true
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Clone or update repository
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: "{{ branch }}"
+        force: true
+
+    - name: Copy environment file for genai-service
+      copy:
+        dest: "{{ app_dir }}/genai-service/.env"
+        content: |
+          LLM_PROVIDER=azure
+          AZURE_LLM_API_KEY={{ azure_llm_api_key }}
+          AZURE_LLM_BASE_URL={{ azure_llm_base_url }}
+          AZURE_LLM_API_VERSION=2024-12-01-preview
+          MODEL_NAME=gpt-5-nano
+          TEMPERATURE=0.7
+          MAX_TOKENS=8000
+          LOG_LEVEL=INFO
+        mode: "0600"
+      when: azure_llm_api_key is defined
+
+    - name: Build and start services
+      shell: docker compose up -d --build --force-recreate
+      args:
+        chdir: "{{ app_dir }}"
+
+    - name: Wait for services
+      shell: docker compose ps
+      args:
+        chdir: "{{ app_dir }}"
+      register: compose_status
+      retries: 6
+      delay: 10
+      until: compose_status.rc == 0

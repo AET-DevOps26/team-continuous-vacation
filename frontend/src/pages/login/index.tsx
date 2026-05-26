@@ -61,7 +61,8 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const isPending = loginMutation.status === "pending" || registerMutation.status === "pending";
+  const isPending =
+    loginMutation.status === "pending" || registerMutation.status === "pending";
 
   return (
     <div className="flex items-center justify-center min-h-screen p-4 bg-background">
@@ -106,7 +107,11 @@ export const LoginPage: React.FC = () => {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="you@example.com" {...field} />
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -119,7 +124,11 @@ export const LoginPage: React.FC = () => {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="Min. 8 characters" {...field} />
+                      <Input
+                        type="password"
+                        placeholder="Min. 8 characters"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -127,8 +136,12 @@ export const LoginPage: React.FC = () => {
               />
               <Button type="submit" className="w-full" disabled={isPending}>
                 {isPending
-                  ? mode === "login" ? "Signing in..." : "Creating account..."
-                  : mode === "login" ? "Sign In" : "Create Account"}
+                  ? mode === "login"
+                    ? "Signing in..."
+                    : "Creating account..."
+                  : mode === "login"
+                    ? "Sign In"
+                    : "Create Account"}
               </Button>
             </form>
           </Form>

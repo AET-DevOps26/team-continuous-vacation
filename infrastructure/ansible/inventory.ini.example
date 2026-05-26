@@ -1,0 +1,4 @@
+[triptailor]
+# Replace with your VM's public IP after terraform apply
+# Example: 20.52.xxx.xxx
+triptailor-vm ansible_host=<REPLACE_WITH_VM_IP> ansible_user=tripadmin ansible_ssh_private_key_file=~/.ssh/<ssh-key>

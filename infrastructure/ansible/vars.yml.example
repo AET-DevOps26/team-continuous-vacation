@@ -1,0 +1,4 @@
+---
+# GenAI service secrets - copy to vars.yml and fill in
+azure_llm_api_key: "your-azure-api-key"
+azure_llm_base_url: "https://continous-vacation.cognitiveservices.azure.com/"
