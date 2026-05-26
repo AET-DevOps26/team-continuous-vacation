@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Stage 1: Build the React application
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -10,6 +12,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --legacy-peer-deps
 
 COPY . .
+COPY --from=api-spec frontend.yaml ../api-specification/frontend.yaml
 
 RUN npm run build
 
