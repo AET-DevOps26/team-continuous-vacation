@@ -1,0 +1,152 @@
+name: Build, publish, and deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_aet:
+        description: Deploy to the AET Kubernetes namespace after publishing images
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  push:
+    branches: [ "main", "feature/k8s-helm-aet" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: aet-devops26/team-continuous-vacation
+  AET_NAMESPACE: team-continuous-vacation
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+            image: backend
+            build_contexts: |
+              api-spec=./api-specification
+          - service: persistence-service
+            context: ./persistence-service
+            image: persistence-service
+            build_contexts: |
+              api-spec=./api-specification
+          - service: genai-service
+            context: ./genai-service
+            image: genai-service
+            build_contexts: ""
+          - service: frontend
+            context: ./frontend
+            image: frontend
+            build_contexts: |
+              api-spec=./api-specification
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          build-contexts: ${{ matrix.build_contexts }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+  deploy-aet:
+    needs: publish
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.deploy_aet == 'true'
+    environment: aet
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "${{ secrets.AET_KUBECONFIG }}" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Deploy Helm release
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          AZURE_LLM_API_KEY: ${{ secrets.AZURE_LLM_API_KEY }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: |
+          POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-trippassword}"
+          JWT_SECRET="${JWT_SECRET:-dev-only-change-this-secret-to-at-least-32-bytes}"
+
+          if [ -z "${AZURE_LLM_API_KEY}" ]; then
+            echo "AZURE_LLM_API_KEY repository secret is required." >&2
+            exit 1
+          fi
+
+          if [ -n "${GHCR_USERNAME}" ] && [ -n "${GHCR_PAT}" ]; then
+            kubectl -n "${AET_NAMESPACE}" create secret docker-registry ghcr-pull-secret \
+              --docker-server=ghcr.io \
+              --docker-username="${GHCR_USERNAME}" \
+              --docker-password="${GHCR_PAT}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            image_pull_secret_args=(--set "global.imagePullSecrets[0].name=ghcr-pull-secret")
+          else
+            image_pull_secret_args=()
+          fi
+
+          printf '%s' "${POSTGRES_PASSWORD}" > /tmp/postgres-password
+          printf '%s' "${JWT_SECRET}" > /tmp/jwt-secret
+          printf '%s' "${AZURE_LLM_API_KEY}" > /tmp/azure-llm-api-key
+
+          helm upgrade --install triptailor ./infrastructure/kubernetes/triptailor \
+            --namespace "${AET_NAMESPACE}" \
+            --set persistenceService.image.tag="${GITHUB_SHA::7}" \
+            --set genaiService.image.tag="${GITHUB_SHA::7}" \
+            --set backend.image.tag="${GITHUB_SHA::7}" \
+            --set frontend.image.tag="${GITHUB_SHA::7}" \
+            --set-file postgres.auth.password=/tmp/postgres-password \
+            --set-file backend.secrets.JWT_SECRET=/tmp/jwt-secret \
+            --set-file genaiService.secrets.AZURE_LLM_API_KEY=/tmp/azure-llm-api-key \
+            "${image_pull_secret_args[@]}" \
+            -f infrastructure/kubernetes/triptailor/values-aet.example.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/db --timeout=180s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/persistence-service --timeout=180s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/genai-service --timeout=180s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/backend --timeout=180s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/frontend --timeout=180s
+
+      - name: Show deployment status
+        run: kubectl -n "${AET_NAMESPACE}" get pods,svc,ingress

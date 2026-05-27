@@ -1,0 +1,70 @@
+# Copy this file to values-aet.yaml and adjust it for the AET cluster.
+# Do not commit real secrets or private registry credentials.
+
+global:
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  # Example:
+  # imagePullSecrets:
+  #   - name: gitlab-registry
+
+postgres:
+  auth:
+    database: triptailor
+    username: tripuser
+    password: change-me
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClassName: ""
+
+persistenceService:
+  image:
+    repository: ghcr.io/aet-devops26/team-continuous-vacation/persistence-service
+    tag: change-me-to-git-sha
+
+genaiService:
+  image:
+    repository: ghcr.io/aet-devops26/team-continuous-vacation/genai-service
+    tag: change-me-to-git-sha
+  config:
+    LLM_PROVIDER: azure
+    AZURE_LLM_BASE_URL: https://continous-vacation.cognitiveservices.azure.com/
+    AZURE_LLM_API_VERSION: 2024-12-01-preview
+    MODEL_NAME: gpt-5-nano
+    TEMPERATURE: "0.7"
+    MAX_TOKENS: "8000"
+    LOCAL_LLM_API_KEY: ollama
+    LOCAL_LLM_BASE_URL: http://localhost:11434/v1
+    LOG_LEVEL: INFO
+  secrets:
+    AZURE_LLM_API_KEY: change-me
+
+backend:
+  image:
+    repository: ghcr.io/aet-devops26/team-continuous-vacation/backend
+    tag: change-me-to-git-sha
+  secrets:
+    JWT_SECRET: change-me-to-at-least-32-bytes
+
+frontend:
+  image:
+    repository: ghcr.io/aet-devops26/team-continuous-vacation/frontend
+    tag: change-me-to-git-sha
+  service:
+    type: ClusterIP
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: team-continuous-vacation.stud.k8s.aet.cit.tum.de
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: team-continuous-vacation-tls
+      hosts:
+        - team-continuous-vacation.stud.k8s.aet.cit.tum.de

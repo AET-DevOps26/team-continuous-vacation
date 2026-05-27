@@ -35,7 +35,7 @@ gradle-app.setting
 # Ignore build artifacts at any depth
 **/build/
 **/out/
-**/bin/ 
+**/bin/
 
 # OpenAPI specs copied from api-specification/ by Gradle
 backend/src/main/resources/openapi.yaml
@@ -82,3 +82,4 @@ infrastructure/terraform/terraform.tfvars
 infrastructure/ansible/vars.yml
 infrastructure/ansible/inventory.ini
 infrastructure/terraform/.terraform.tfstate.lock.info
+infrastructure/kubernetes/triptailor/values-aet.yaml

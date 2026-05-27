@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "triptailor.fullname" . }}-config
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+data:
+  PERSISTENCE_BASE_URL: "http://{{ .Values.persistenceService.service.name }}:{{ .Values.persistenceService.service.port }}"
+  GENAI_BASE_URL: "http://{{ .Values.genaiService.service.name }}:{{ .Values.genaiService.service.port }}"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ .Values.postgres.service.name }}:{{ .Values.postgres.service.port }}/{{ .Values.postgres.auth.database }}"
+  SPRING_DATASOURCE_USERNAME: {{ .Values.postgres.auth.username | quote }}
+  JWT_ISSUER: {{ .Values.backend.config.JWT_ISSUER | quote }}
+  JWT_TTL_DAYS: {{ .Values.backend.config.JWT_TTL_DAYS | quote }}
+  LLM_PROVIDER: {{ .Values.genaiService.config.LLM_PROVIDER | quote }}
+  AZURE_LLM_BASE_URL: {{ .Values.genaiService.config.AZURE_LLM_BASE_URL | quote }}
+  AZURE_LLM_API_VERSION: {{ .Values.genaiService.config.AZURE_LLM_API_VERSION | quote }}
+  MODEL_NAME: {{ .Values.genaiService.config.MODEL_NAME | quote }}
+  TEMPERATURE: {{ .Values.genaiService.config.TEMPERATURE | quote }}
+  MAX_TOKENS: {{ .Values.genaiService.config.MAX_TOKENS | quote }}
+  LOCAL_LLM_API_KEY: {{ .Values.genaiService.config.LOCAL_LLM_API_KEY | quote }}
+  LOCAL_LLM_BASE_URL: {{ .Values.genaiService.config.LOCAL_LLM_BASE_URL | quote }}
+  LOG_LEVEL: {{ .Values.genaiService.config.LOG_LEVEL | quote }}
