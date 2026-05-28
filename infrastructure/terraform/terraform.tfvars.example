@@ -1,6 +1,6 @@
 subscription_id     = "your-azure-subscription-id"
 resource_group_name = "triptailor-rg"
-location            = "austriaeast"
+location            = "polandcentral"
 vm_size             = "Standard_B2s_v2"
 admin_username      = "tripadmin"
 ssh_public_key_path = "~/.ssh/<ssh-key>.pub"
