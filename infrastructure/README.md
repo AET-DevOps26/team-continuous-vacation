@@ -55,18 +55,20 @@ az role assignment create \
   --scope "/subscriptions/$SUBSCRIPTION_ID"
 ```
 
-Add a federated credential for your repository. Replace `OWNER` and `REPO` with the GitHub organization/user and repository name.
+Add a federated credential for your repository and the `azure` GitHub environment used by `.github/workflows/azure-vm-deploy.yaml`.
 
 ```bash
 az ad app federated-credential create \
   --id "$APP_ID" \
   --parameters '{
-    "name": "github-main",
+    "name": "github-environment-azure",
     "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:AET-DevOps26/team-continuous-vacation:ref:refs/heads/main",
+    "subject": "repo:AET-DevOps26/team-continuous-vacation:environment:azure",
     "audiences": ["api://AzureADTokenExchange"]
   }'
 ```
+
+If you also want to authenticate jobs that do not use a GitHub environment, add a second federated credential with the branch subject `repo:AET-DevOps26/team-continuous-vacation:ref:refs/heads/main`.
 
 Create a storage account and blob container for Terraform remote state. The storage account name must be globally unique and contain only lowercase letters and numbers.
 
@@ -112,8 +114,11 @@ STORAGE_SCOPE=$(az storage account show \
   --resource-group triptailor-tfstate-rg \
   --query id -o tsv)
 
+SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
+
 az role assignment create \
-  --assignee "$APP_ID" \
+  --assignee-object-id "$SP_OBJECT_ID" \
+  --assignee-principal-type ServicePrincipal \
   --role "Storage Blob Data Contributor" \
   --scope "$STORAGE_SCOPE"
 ```
