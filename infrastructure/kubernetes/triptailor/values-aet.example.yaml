@@ -59,6 +59,14 @@ ingress:
   className: nginx
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+  api:
+    enabled: true
+    path: /api(/|$)(.*)
+    pathType: ImplementationSpecific
+    annotations:
+      nginx.ingress.kubernetes.io/use-regex: "true"
+      nginx.ingress.kubernetes.io/rewrite-target: /$2
+      cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
     - host: team-continuous-vacation.stud.k8s.aet.cit.tum.de
       paths:

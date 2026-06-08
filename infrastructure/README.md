@@ -54,9 +54,9 @@ ansible-playbook -i inventory.ini playbook.yml -e @vars.yml
 
 | Service    | URL                  |
 |------------|----------------------|
-| Frontend   | `http://<VM_IP>:3000` |
-| Backend    | `http://<VM_IP>:8080` |
-| Persistence| `http://<VM_IP>:8081` |
+| Gateway    | `http://<VM_IP>:3000` |
+
+The gateway is the single public entrypoint. It routes `/` to the frontend and `/api/*` to the backend. Persistence, GenAI, and Postgres are internal services.
 
 ## Teardown
 

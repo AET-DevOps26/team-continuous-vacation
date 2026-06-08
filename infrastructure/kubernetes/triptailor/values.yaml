@@ -87,6 +87,13 @@ ingress:
   enabled: false
   className: ""
   annotations: {}
+  api:
+    enabled: true
+    path: /api(/|$)(.*)
+    pathType: ImplementationSpecific
+    annotations:
+      nginx.ingress.kubernetes.io/use-regex: "true"
+      nginx.ingress.kubernetes.io/rewrite-target: /$2
   hosts:
     - host: triptailor.local
       paths:
