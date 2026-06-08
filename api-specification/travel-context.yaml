@@ -1,0 +1,205 @@
+openapi: 3.0.3
+info:
+  title: TripTailor — Travel Context API
+  description: >
+    Internal enrichment service for retrieving and ranking real-world travel
+    context such as places, events, weather, and routing hints.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8090
+
+tags:
+  - name: Travel Context
+
+paths:
+  /trip-context:
+    post:
+      tags: [Travel Context]
+      summary: Build event-first travel context for a trip request
+      operationId: buildTripContext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TripContextRequest"
+      responses:
+        "200":
+          description: Event-first travel context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripContextResponse"
+        "502":
+          description: External context provider failure.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+    Coordinates:
+      type: object
+      required: [lat, lon]
+      properties:
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+
+    TripContextRequest:
+      type: object
+      required: [destination, startDate, endDate, vibe]
+      properties:
+        destination:
+          type: string
+          example: Munich
+        startDate:
+          type: string
+          format: date
+          example: "2026-06-01"
+        endDate:
+          type: string
+          format: date
+          example: "2026-06-05"
+        vibe:
+          type: string
+          example: cultural and relaxed
+
+    TripContextResponse:
+      type: object
+      required: [destination, coordinates, events, places]
+      properties:
+        destination:
+          type: string
+        coordinates:
+          $ref: "#/components/schemas/Coordinates"
+        places:
+          type: array
+          description: Legacy place candidates. Empty in the events-first v1 flow.
+          items:
+            $ref: "#/components/schemas/PlaceCandidate"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventCandidate"
+
+    TicketLink:
+      type: object
+      required: [link]
+      properties:
+        source:
+          type: string
+          nullable: true
+          example: Ticketmaster.com
+        link:
+          type: string
+          format: uri
+        linkType:
+          type: string
+          nullable: true
+          example: tickets
+
+    EventCandidate:
+      type: object
+      required: [source, sourceId, title, address, ticketLinks, score]
+      properties:
+        source:
+          type: string
+          example: serpapi_google_events
+        sourceId:
+          type: string
+          example: serpapi:abc123
+        title:
+          type: string
+          example: Munich Film Festival
+        description:
+          type: string
+          nullable: true
+        dateText:
+          type: string
+          nullable: true
+          example: Fri, Jun 5, 7:00 PM
+        startDate:
+          type: string
+          nullable: true
+          example: Jun 5
+        when:
+          type: string
+          nullable: true
+          example: Fri, Jun 5, 7:00 PM
+        venueName:
+          type: string
+          nullable: true
+        address:
+          type: array
+          items:
+            type: string
+        link:
+          type: string
+          format: uri
+          nullable: true
+        ticketLinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketLink"
+        thumbnail:
+          type: string
+          format: uri
+          nullable: true
+        score:
+          type: number
+          format: double
+
+    PlaceCandidate:
+      type: object
+      required: [source, sourceId, name, latitude, longitude, osmTags, score]
+      properties:
+        source:
+          type: string
+          example: openstreetmap
+        sourceId:
+          type: string
+          example: relation:62511
+        name:
+          type: string
+          example: Englischer Garten
+        category:
+          type: string
+          nullable: true
+          example: leisure:park
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        address:
+          type: string
+          nullable: true
+        website:
+          type: string
+          nullable: true
+        wikipedia:
+          type: string
+          nullable: true
+        openingHours:
+          type: string
+          nullable: true
+        osmTags:
+          type: object
+          additionalProperties: true
+        score:
+          type: number
+          format: double

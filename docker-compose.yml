@@ -57,11 +57,31 @@ services:
     container_name: triptailor-genai
     ports:
       - "8000:8000"
+    environment:
+      - TRAVEL_CONTEXT_BASE_URL=http://travel-context-service:8090
     env_file:
       - ./genai-service/.env.example
       - ./genai-service/.env
+    depends_on:
+      travel-context-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  travel-context-service:
+    build:
+      context: ./travel-context-service
+    container_name: triptailor-travel-context
+    ports:
+      - "8090:8090"
+    env_file:
+      - ./travel-context-service/.env.example
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
       interval: 10s
       timeout: 5s
       retries: 5

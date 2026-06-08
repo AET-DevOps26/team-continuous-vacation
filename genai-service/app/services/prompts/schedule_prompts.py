@@ -11,9 +11,13 @@ from app.models.schemas import (
     GenerationPreferences,
     TimeBlock,
 )
+from app.services.travel_context_client import TravelContext
 
 
-def get_schedule_generation_prompt(preferences: GenerationPreferences) -> str:
+def get_schedule_generation_prompt(
+    preferences: GenerationPreferences,
+    travel_context: TravelContext | None = None,
+) -> str:
     """Build the prompt used to generate a complete trip schedule."""
     expected_dates = _inclusive_dates(preferences)
 
@@ -24,12 +28,16 @@ def get_schedule_generation_prompt(preferences: GenerationPreferences) -> str:
         "vibe": preferences.vibe,
         "expectedDates": [date.isoformat() for date in expected_dates],
     }
+    real_events = _real_events_context(travel_context)
 
     return f"""
 Create a complete travel schedule for the trip request below.
 
 Trip request:
 {_json(request_context)}
+
+Real events available for this destination:
+{_json(real_events)}
 
 Return JSON only. The response must match this exact shape:
 {{
@@ -59,6 +67,11 @@ Hard requirements:
 - Prefer MORNING, AFTERNOON, and EVENING for a compact day; add NOON or NIGHT only when it improves the itinerary.
 - Activity titles must be unique across the whole trip.
 - Activities must be realistic for the destination and strongly match the requested vibe.
+- Use real events only when they fit the requested date range, destination, vibe, and day structure.
+- Do not invent event ticket links, venues, exact times, source IDs, websites, or event dates.
+- Generate normal attractions, landmarks, lakes, parks, and sightseeing ideas from your destination knowledge
+  when they fit better than the available events.
+- If event metadata does not say whether an activity is indoor/outdoor or cultural/sporty, infer reasonable activity fields.
 - Descriptions must be concrete enough for a traveler to understand what they will do.
 - durationMinutes must be an integer from 30 to 360.
 - isIndoor must be true for mostly indoor activities and false for mostly outdoor activities.
@@ -128,3 +141,34 @@ def _enum_values(enum_type) -> str:
 
 def _json(value) -> str:
     return json.dumps(value, indent=2, sort_keys=True)
+
+
+def _real_events_context(travel_context: TravelContext | None):
+    if travel_context is None:
+        return []
+
+    events = []
+    for event in travel_context.events[:10]:
+        events.append(
+            {
+                "title": event.title,
+                "description": event.description,
+                "dateText": event.dateText,
+                "startDate": event.startDate,
+                "when": event.when,
+                "venueName": event.venueName,
+                "address": event.address,
+                "link": event.link,
+                "ticketLinks": [
+                    {
+                        "source": ticket.source,
+                        "link": ticket.link,
+                        "linkType": ticket.linkType,
+                    }
+                    for ticket in event.ticketLinks[:3]
+                ],
+                "score": event.score,
+                "sourceId": event.sourceId,
+            }
+        )
+    return events
