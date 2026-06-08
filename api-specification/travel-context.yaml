@@ -76,10 +76,16 @@ components:
         vibe:
           type: string
           example: cultural and relaxed
+        includeEvents:
+          type: boolean
+          default: true
+          description: >
+            When false, paid event lookups are skipped while weather is still
+            returned. Used to keep external event API usage gated by relevance.
 
     TripContextResponse:
       type: object
-      required: [destination, coordinates, events, places]
+      required: [destination, coordinates, events, places, weather]
       properties:
         destination:
           type: string
@@ -94,6 +100,71 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/EventCandidate"
+        weather:
+          type: array
+          description: Per-day weather broken down into activity time blocks.
+          items:
+            $ref: "#/components/schemas/WeatherDaily"
+
+    WeatherBlock:
+      type: object
+      required: [timeBlock, condition, precipitationMm]
+      properties:
+        timeBlock:
+          type: string
+          enum: [MORNING, NOON, AFTERNOON, EVENING, NIGHT]
+        condition:
+          type: string
+          example: Thunderstorm
+        temperatureC:
+          type: number
+          format: double
+          nullable: true
+          example: 18.4
+        precipitationMm:
+          type: number
+          format: double
+          example: 8.0
+
+    WeatherDaily:
+      type: object
+      required: [date, source, summary, blocks]
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-06-20"
+        source:
+          type: string
+          enum: [forecast, historical]
+          description: >
+            forecast = live forecast within the ~16-day horizon; historical =
+            same calendar dates from the previous year, used as a seasonal estimate.
+        referenceDate:
+          type: string
+          format: date
+          nullable: true
+          description: For historical entries, the prior-year date the data came from.
+          example: "2025-06-20"
+        summary:
+          type: string
+          example: "Thunderstorm, 14-22°C"
+        tempMinC:
+          type: number
+          format: double
+          nullable: true
+        tempMaxC:
+          type: number
+          format: double
+          nullable: true
+        precipitationProbabilityMax:
+          type: integer
+          nullable: true
+          example: 80
+        blocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeatherBlock"
 
     TicketLink:
       type: object

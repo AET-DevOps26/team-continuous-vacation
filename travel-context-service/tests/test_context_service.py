@@ -1,4 +1,11 @@
-from app.models.schemas import Coordinates, EventCandidate, GeocodedLocation, TripContextRequest
+from app.models.schemas import (
+    Coordinates,
+    EventCandidate,
+    GeocodedLocation,
+    TripContextRequest,
+    WeatherBlock,
+    WeatherDaily,
+)
 from app.services.cache import TtlCache
 from app.services.context_service import TravelContextService
 
@@ -6,6 +13,38 @@ from app.services.context_service import TravelContextService
 class FailingGeocoder:
     async def geocode(self, destination):
         raise RuntimeError("blocked")
+
+
+class FakeWeatherProvider:
+    def __init__(self):
+        self.calls = []
+
+    async def get_weather(self, coordinates, start_date, end_date, today):
+        self.calls.append(
+            {
+                "coordinates": coordinates,
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+        )
+        return [
+            WeatherDaily(
+                date=start_date,
+                source="forecast",
+                summary="Thunderstorm, 14-22°C",
+                tempMinC=14.0,
+                tempMaxC=22.0,
+                precipitationProbabilityMax=80,
+                blocks=[
+                    WeatherBlock(
+                        timeBlock="AFTERNOON",
+                        condition="Thunderstorm",
+                        temperatureC=20.0,
+                        precipitationMm=8.0,
+                    )
+                ],
+            )
+        ]
 
 
 class FallbackGeocoder:
@@ -62,8 +101,10 @@ async def test_context_service_returns_events_and_empty_places():
         geocoder=FallbackGeocoder(),
         fallback_geocoder=FallbackGeocoder(),
         events_provider=events_provider,
+        weather_provider=FakeWeatherProvider(),
         geocode_cache=TtlCache(60),
         events_cache=TtlCache(60),
+        weather_cache=TtlCache(60),
     )
 
     response = await service.build_trip_context(
@@ -80,3 +121,87 @@ async def test_context_service_returns_events_and_empty_places():
     assert response.places == []
     assert events_provider.calls[0]["location_name"] == "Munich"
     assert events_provider.calls[0]["country_code"] == "de"
+
+
+async def test_context_service_always_returns_weather():
+    weather_provider = FakeWeatherProvider()
+    service = TravelContextService(
+        geocoder=FallbackGeocoder(),
+        fallback_geocoder=FallbackGeocoder(),
+        events_provider=EventProvider(),
+        weather_provider=weather_provider,
+        geocode_cache=TtlCache(60),
+        events_cache=TtlCache(60),
+        weather_cache=TtlCache(60),
+    )
+
+    response = await service.build_trip_context(
+        TripContextRequest(
+            destination="Munich",
+            startDate="2026-06-01",
+            endDate="2026-06-03",
+            vibe="cultural",
+        )
+    )
+
+    assert len(weather_provider.calls) == 1
+    assert response.weather[0].blocks[0].condition == "Thunderstorm"
+    assert response.weather[0].blocks[0].timeBlock == "AFTERNOON"
+    assert response.weather[0].precipitationProbabilityMax == 80
+
+
+async def test_context_service_skips_events_but_keeps_weather_when_disabled():
+    events_provider = EventProvider()
+    weather_provider = FakeWeatherProvider()
+    service = TravelContextService(
+        geocoder=FallbackGeocoder(),
+        fallback_geocoder=FallbackGeocoder(),
+        events_provider=events_provider,
+        weather_provider=weather_provider,
+        geocode_cache=TtlCache(60),
+        events_cache=TtlCache(60),
+        weather_cache=TtlCache(60),
+    )
+
+    response = await service.build_trip_context(
+        TripContextRequest(
+            destination="Mallorca",
+            startDate="2026-06-01",
+            endDate="2026-06-03",
+            vibe="beach vacation",
+            includeEvents=False,
+        )
+    )
+
+    assert events_provider.calls == []
+    assert response.events == []
+    assert len(weather_provider.calls) == 1
+    assert response.weather[0].summary.startswith("Thunderstorm")
+
+
+async def test_context_service_weather_is_best_effort_on_failure():
+    class FailingWeatherProvider:
+        async def get_weather(self, coordinates, start_date, end_date, today):
+            raise RuntimeError("weather down")
+
+    service = TravelContextService(
+        geocoder=FallbackGeocoder(),
+        fallback_geocoder=FallbackGeocoder(),
+        events_provider=EventProvider(),
+        weather_provider=FailingWeatherProvider(),
+        geocode_cache=TtlCache(60),
+        events_cache=TtlCache(60),
+        weather_cache=TtlCache(60),
+    )
+
+    response = await service.build_trip_context(
+        TripContextRequest(
+            destination="Munich",
+            startDate="2026-06-01",
+            endDate="2026-06-03",
+            vibe="cultural",
+        )
+    )
+
+    assert response.weather == []
+    assert response.events[0].title == "Munich Summer Festival"

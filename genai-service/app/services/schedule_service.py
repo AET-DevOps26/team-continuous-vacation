@@ -80,20 +80,23 @@ class ScheduleService:
             context_decision.source,
             context_decision.reason,
         )
-        travel_context = (
-            await self.travel_context_client.get_trip_context(preferences)
-            if context_decision.should_fetch_events_context
-            else None
+        # Weather is useful for every trip (even pure beach trips), so we always
+        # fetch the travel context for it. Paid event lookups stay gated behind
+        # the relevance decision via the includeEvents flag.
+        travel_context = await self.travel_context_client.get_trip_context(
+            preferences,
+            include_events=context_decision.should_fetch_events_context,
         )
         prompt = get_schedule_generation_prompt(preferences, travel_context)
         logger.debug(
             "Starting schedule LLM generation destination=%s startDate=%s endDate=%s "
-            "vibe=%s context_events=%s prompt_length=%s prompt=%s",
+            "vibe=%s context_events=%s context_weather_days=%s prompt_length=%s prompt=%s",
             preferences.destination,
             preferences.startDate,
             preferences.endDate,
             preferences.vibe,
             len(travel_context.events) if travel_context else 0,
+            len(travel_context.weather) if travel_context else 0,
             len(prompt),
             prompt,
         )
