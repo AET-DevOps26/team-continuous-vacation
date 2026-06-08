@@ -43,6 +43,10 @@ jobs:
             context: ./genai-service
             image: genai-service
             build_contexts: ""
+          - service: travel-context-service
+            context: ./travel-context-service
+            image: travel-context-service
+            build_contexts: ""
           - service: frontend
             context: ./frontend
             image: frontend
@@ -102,6 +106,7 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           AZURE_LLM_API_KEY: ${{ secrets.AZURE_LLM_API_KEY }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
@@ -110,6 +115,11 @@ jobs:
 
           if [ -z "${AZURE_LLM_API_KEY}" ]; then
             echo "AZURE_LLM_API_KEY repository secret is required." >&2
+            exit 1
+          fi
+
+          if [ -z "${SERPAPI_API_KEY}" ]; then
+            echo "SERPAPI_API_KEY repository secret is required for travel-context-service event lookup." >&2
             exit 1
           fi
 
@@ -127,16 +137,19 @@ jobs:
           printf '%s' "${POSTGRES_PASSWORD}" > /tmp/postgres-password
           printf '%s' "${JWT_SECRET}" > /tmp/jwt-secret
           printf '%s' "${AZURE_LLM_API_KEY}" > /tmp/azure-llm-api-key
+          printf '%s' "${SERPAPI_API_KEY}" > /tmp/serpapi-api-key
 
           helm upgrade --install triptailor ./infrastructure/kubernetes/triptailor \
             --namespace "${AET_NAMESPACE}" \
             --set persistenceService.image.tag="${GITHUB_SHA::7}" \
             --set genaiService.image.tag="${GITHUB_SHA::7}" \
+            --set travelContextService.image.tag="${GITHUB_SHA::7}" \
             --set backend.image.tag="${GITHUB_SHA::7}" \
             --set frontend.image.tag="${GITHUB_SHA::7}" \
             --set-file postgres.auth.password=/tmp/postgres-password \
             --set-file backend.secrets.JWT_SECRET=/tmp/jwt-secret \
             --set-file genaiService.secrets.AZURE_LLM_API_KEY=/tmp/azure-llm-api-key \
+            --set-file travelContextService.secrets.SERPAPI_API_KEY=/tmp/serpapi-api-key \
             "${image_pull_secret_args[@]}" \
             -f infrastructure/kubernetes/triptailor/values-aet.example.yaml
 
@@ -144,6 +157,7 @@ jobs:
         run: |
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/db --timeout=180s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/persistence-service --timeout=180s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/travel-context-service --timeout=180s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/genai-service --timeout=180s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/backend --timeout=180s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/frontend --timeout=180s

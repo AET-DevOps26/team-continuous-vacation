@@ -28,6 +28,8 @@ from app.services.prompts.schedule_prompts import (
     get_alternative_activity_prompt,
     get_schedule_generation_prompt,
 )
+from app.services.context_relevance import ContextRelevanceClassifier
+from app.services.travel_context_client import TravelContextClient
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +46,15 @@ class ScheduleGenerationError(Exception):
 class ScheduleService:
     """Service for AI-powered schedule generation"""
 
-    def __init__(self, llm_provider: Optional[LLMProvider] = None):
+    def __init__(
+        self,
+        llm_provider: Optional[LLMProvider] = None,
+        travel_context_client: Optional[TravelContextClient] = None,
+        context_relevance_classifier: Optional[ContextRelevanceClassifier] = None,
+    ):
         self.llm_provider = llm_provider or LLMProviderFactory.get_provider()
+        self.travel_context_client = travel_context_client or TravelContextClient()
+        self.context_relevance_classifier = context_relevance_classifier or ContextRelevanceClassifier()
         self.model_name = settings.MODEL_NAME
         self.temperature = settings.TEMPERATURE
         self.max_tokens = settings.MAX_TOKENS
@@ -60,14 +69,31 @@ class ScheduleService:
         Returns:
             Schedule with all days and activities
         """
-        prompt = get_schedule_generation_prompt(preferences)
+        context_decision = await self.context_relevance_classifier.should_fetch_events_context(
+            preferences,
+            self.llm_provider,
+        )
+        logger.info(
+            "Context relevance decision destination=%s should_fetch_events_context=%s source=%s reason=%s",
+            preferences.destination,
+            context_decision.should_fetch_events_context,
+            context_decision.source,
+            context_decision.reason,
+        )
+        travel_context = (
+            await self.travel_context_client.get_trip_context(preferences)
+            if context_decision.should_fetch_events_context
+            else None
+        )
+        prompt = get_schedule_generation_prompt(preferences, travel_context)
         logger.debug(
             "Starting schedule LLM generation destination=%s startDate=%s endDate=%s "
-            "vibe=%s prompt_length=%s prompt=%s",
+            "vibe=%s context_events=%s prompt_length=%s prompt=%s",
             preferences.destination,
             preferences.startDate,
             preferences.endDate,
             preferences.vibe,
+            len(travel_context.events) if travel_context else 0,
             len(prompt),
             prompt,
         )

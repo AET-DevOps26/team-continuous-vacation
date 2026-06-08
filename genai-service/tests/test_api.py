@@ -4,6 +4,11 @@ from app.main import app
 from app.services.schedule_service import ScheduleService
 
 
+class NullTravelContextClient:
+    async def get_trip_context(self, preferences):
+        return None
+
+
 class FakeLLMProvider:
     async def generate(self, prompt, options):
         if "replacement activity" in prompt:
@@ -147,7 +152,10 @@ class FakeLLMProvider:
 
 
 def override_schedule_service():
-    return ScheduleService(llm_provider=FakeLLMProvider())
+    return ScheduleService(
+        llm_provider=FakeLLMProvider(),
+        travel_context_client=NullTravelContextClient(),
+    )
 
 
 app.dependency_overrides[get_schedule_service] = override_schedule_service
