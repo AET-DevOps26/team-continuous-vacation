@@ -29,6 +29,7 @@ class SerpApiEventsProvider:
         params = {
             "engine": "google_events",
             "q": f"Events in {location_name}",
+            "location": location_name,
             "gl": country_code,
             "api_key": self.api_key,
             "no_cache": "false",
