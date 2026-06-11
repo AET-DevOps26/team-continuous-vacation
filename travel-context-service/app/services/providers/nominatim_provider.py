@@ -27,6 +27,7 @@ class NominatimProvider:
                     "format": "jsonv2",
                     "limit": 1,
                     "addressdetails": 1,
+                    "namedetails": 1,
                 },
                 headers={"User-Agent": self.user_agent},
             )
@@ -48,9 +49,12 @@ class NominatimProvider:
             raise GeocodingError(f"Could not geocode destination: {destination}")
 
         first_result = results[0]
+        name_details = first_result.get("namedetails") or {}
+        location_name = name_details.get("name:en") or first_result.get("name") or destination
         logger.info(
-            "Nominatim selected destination=%s display_name=%r country_code=%r lat=%s lon=%s",
+            "Nominatim selected destination=%s name=%r display_name=%r country_code=%r lat=%s lon=%s",
             destination,
+            location_name,
             first_result.get("display_name"),
             (first_result.get("address") or {}).get("country_code"),
             first_result.get("lat"),
@@ -58,7 +62,7 @@ class NominatimProvider:
         )
         address = first_result.get("address") or {}
         return GeocodedLocation(
-            name=first_result.get("name") or destination,
+            name=location_name,
             displayName=first_result.get("display_name"),
             countryCode=address.get("country_code"),
             coordinates=Coordinates(

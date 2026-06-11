@@ -31,7 +31,7 @@ env:
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'triptailor-rg' }}
   AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'polandcentral' }}
-  AZURE_VM_SIZE: ${{ vars.AZURE_VM_SIZE || 'Standard_B2s_v2' }}
+  AZURE_VM_SIZE: ${{ vars.AZURE_VM_SIZE || 'Standard_B2ats_v2' }}
   AZURE_VM_ADMIN_USERNAME: ${{ vars.AZURE_VM_ADMIN_USERNAME || 'tripadmin' }}
   AZURE_LLM_BASE_URL: ${{ vars.AZURE_LLM_BASE_URL || secrets.AZURE_LLM_BASE_URL }}
 
