@@ -101,6 +101,12 @@ jobs:
           printf '%s' "${{ secrets.AET_KUBECONFIG }}" > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
 
+      - name: Validate Kubernetes access
+        run: |
+          kubectl config current-context
+          kubectl auth can-i get pods -n "${AET_NAMESPACE}"
+          kubectl -n "${AET_NAMESPACE}" get pods
+
       - name: Deploy Helm release
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}

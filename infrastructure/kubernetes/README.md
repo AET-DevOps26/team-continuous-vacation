@@ -11,7 +11,25 @@ The chart mirrors the working `docker-compose.yml` topology:
 - `backend`: Spring Boot app API on port 8080
 - `frontend`: nginx-served React app on port 3000
 
-The service names intentionally match Docker Compose. The frontend image contains an nginx config that proxies `/api` to `http://backend:8080`, so the backend Kubernetes Service is named `backend`.
+The service names intentionally match Docker Compose. Public traffic enters through one gateway-style edge:
+
+```text
+Browser
+  -> Gateway / Ingress
+      /      -> frontend
+      /api/* -> backend
+  -> backend
+      -> persistence-service
+      -> genai-service
+  -> persistence-service
+      -> db
+```
+
+`persistence-service`, `genai-service`, and `db` stay private inside the cluster. The LLM service is intentionally not exposed through the gateway because the backend owns authentication, validation, trip context, persistence, and error handling.
+
+Kubernetes load balancing is provided by `Service` objects. For example, if `backend.replicaCount` is `3`, the `backend` Service keeps one stable address and distributes traffic across the ready backend pods. This is load balancing only, not autoscaling. Autoscaling would require a separate HorizontalPodAutoscaler and metrics support.
+
+For local Kubernetes, `values-local.yaml` exposes the frontend via NodePort. The frontend nginx container proxies `/api` to the `backend` Service, so the same service-level load balancing is exercised locally.
 
 ## Local Test with Docker Desktop Kubernetes
 
@@ -54,6 +72,22 @@ kubectl -n triptailor-local rollout status deploy/frontend
 ```
 
 Open the frontend at `http://localhost:30080`.
+
+## Demonstrate Backend Load Balancing
+
+Run:
+
+```bash
+./scripts/demo-load-balancing.sh
+```
+
+The script deploys the local chart with three backend replicas, waits for rollout, lists the backend pods, and repeatedly calls:
+
+```bash
+http://localhost:30080/api/debug/instance
+```
+
+The response includes the backend pod/container hostname. Seeing more than one distinct hostname proves requests are being distributed through the `backend` Kubernetes Service.
 
 Uninstall:
 

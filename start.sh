@@ -6,6 +6,8 @@ CHART_DIR="${ROOT_DIR}/infrastructure/kubernetes/triptailor"
 LOCAL_VALUES="${CHART_DIR}/values-local.yaml"
 NAMESPACE="${NAMESPACE:-triptailor-local}"
 RELEASE="${RELEASE:-triptailor}"
+BACKEND_REPLICAS="${BACKEND_REPLICAS:-}"
+FORCE_BUILD_IMAGES="${FORCE_BUILD_IMAGES:-0}"
 
 HELM_VERSION="${HELM_VERSION:-v3.15.4}"
 HELM_BIN="${HELM_BIN:-}"
@@ -69,12 +71,12 @@ build_image_if_missing() {
 	local context="$2"
 	shift 2
 
-	if docker image inspect "${image}" >/dev/null 2>&1; then
+	if [[ "${FORCE_BUILD_IMAGES}" != "1" ]] && docker image inspect "${image}" >/dev/null 2>&1; then
 		echo "Image exists: ${image}"
 		return
 	fi
 
-	echo "Building missing image: ${image}"
+	echo "Building image: ${image}"
 	docker build -t "${image}" "$@" "${context}"
 }
 
@@ -87,10 +89,23 @@ build_image_if_missing "triptailor/travel-context-service:latest" "${ROOT_DIR}/t
 build_image_if_missing "triptailor/frontend:latest" "${ROOT_DIR}/frontend" \
 	--build-context "api-spec=${ROOT_DIR}/api-specification"
 
-"${HELM_BIN}" upgrade --install "${RELEASE}" "${CHART_DIR}" \
-	--namespace "${NAMESPACE}" \
-	--create-namespace \
-	-f "${LOCAL_VALUES}"
+helm_args=(
+	upgrade
+	--install
+	"${RELEASE}"
+	"${CHART_DIR}"
+	--namespace
+	"${NAMESPACE}"
+	--create-namespace
+	-f
+	"${LOCAL_VALUES}"
+)
+
+if [[ -n "${BACKEND_REPLICAS}" ]]; then
+	helm_args+=(--set "backend.replicaCount=${BACKEND_REPLICAS}")
+fi
+
+"${HELM_BIN}" "${helm_args[@]}"
 
 kubectl -n "${NAMESPACE}" rollout status deploy/db --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/persistence-service --timeout=180s

@@ -27,7 +27,7 @@ class SecurityConfig {
 			.csrf { it.disable() }
 			.sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
 			.authorizeHttpRequests {
-				it.requestMatchers("/", "/openapi.yaml", "/health", "/actuator/health", "/auth/**").permitAll()
+				it.requestMatchers("/", "/openapi.yaml", "/health", "/actuator/health", "/auth/**", "/debug/instance").permitAll()
 				it.anyRequest().authenticated()
 			}
 			.exceptionHandling {
