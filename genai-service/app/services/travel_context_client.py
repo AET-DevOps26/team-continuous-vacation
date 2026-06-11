@@ -52,11 +52,30 @@ class EventCandidate(BaseModel):
     score: float = 0.0
 
 
+class WeatherBlock(BaseModel):
+    timeBlock: str
+    condition: str
+    temperatureC: Optional[float] = None
+    precipitationMm: float = 0.0
+
+
+class WeatherDaily(BaseModel):
+    date: str
+    source: str
+    referenceDate: Optional[str] = None
+    summary: str
+    tempMinC: Optional[float] = None
+    tempMaxC: Optional[float] = None
+    precipitationProbabilityMax: Optional[int] = None
+    blocks: list[WeatherBlock] = Field(default_factory=list)
+
+
 class TravelContext(BaseModel):
     destination: str
     coordinates: Coordinates
     events: list[EventCandidate] = Field(default_factory=list)
     places: list[PlaceCandidate] = Field(default_factory=list)
+    weather: list[WeatherDaily] = Field(default_factory=list)
 
 
 class TravelContextClient:
@@ -70,7 +89,11 @@ class TravelContextClient:
         self.timeout_seconds = timeout_seconds
         self.enabled = enabled
 
-    async def get_trip_context(self, preferences: GenerationPreferences) -> Optional[TravelContext]:
+    async def get_trip_context(
+        self,
+        preferences: GenerationPreferences,
+        include_events: bool = True,
+    ) -> Optional[TravelContext]:
         if not self.enabled:
             return None
 
@@ -79,6 +102,7 @@ class TravelContextClient:
             "startDate": preferences.startDate.isoformat(),
             "endDate": preferences.endDate.isoformat(),
             "vibe": preferences.vibe,
+            "includeEvents": include_events,
         }
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:

@@ -1,7 +1,11 @@
+from datetime import date, timedelta
+
 import httpx
 import pytest
 
+from app.models.schemas import Coordinates
 from app.services.providers.nominatim_provider import NominatimProvider
+from app.services.providers.open_meteo_provider import OpenMeteoWeatherProvider
 from app.services.providers.overpass_provider import OverpassProvider, build_overpass_query
 from app.services.providers.photon_provider import PhotonProvider
 from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
@@ -179,3 +183,195 @@ async def test_serpapi_events_returns_empty_when_api_key_missing():
     events = await provider.search_events("Munich", "de")
 
     assert events == []
+
+
+def _hourly_payload(start: date, end: date, include_probability: bool) -> dict:
+    """Build a deterministic hourly payload: clear all day, thunderstorm 14-17h."""
+    times, temps, precipitations, codes, probabilities = [], [], [], [], []
+    day = start
+    while day <= end:
+        for hour in range(24):
+            times.append(f"{day.isoformat()}T{hour:02d}:00")
+            temps.append(float(hour))
+            if 14 <= hour <= 17:
+                precipitations.append(5.0)
+                codes.append(95)
+                probabilities.append(90)
+            else:
+                precipitations.append(0.0)
+                codes.append(0)
+                probabilities.append(10)
+        day += timedelta(days=1)
+    hourly = {
+        "time": times,
+        "temperature_2m": temps,
+        "precipitation": precipitations,
+        "weather_code": codes,
+    }
+    if include_probability:
+        hourly["precipitation_probability"] = probabilities
+    return {"hourly": hourly}
+
+
+def _patch_open_meteo(monkeypatch):
+    calls = []
+
+    async def fake_get(self, url, params=None):
+        calls.append({"url": url, "params": params})
+        start = date.fromisoformat(params["start_date"])
+        end = date.fromisoformat(params["end_date"])
+        include_probability = "precipitation_probability" in params["hourly"]
+        return httpx.Response(
+            200,
+            json=_hourly_payload(start, end, include_probability),
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_open_meteo_forecast_aggregates_hours_into_time_blocks(monkeypatch):
+    calls = _patch_open_meteo(monkeypatch)
+    provider = OpenMeteoWeatherProvider(
+        "https://meteo.example/forecast",
+        "https://meteo.example/archive",
+        forecast_max_days=16,
+    )
+
+    weather = await provider.get_weather(
+        coordinates=Coordinates(lat=48.1, lon=11.5),
+        start_date=date(2026, 6, 3),
+        end_date=date(2026, 6, 3),
+        today=date(2026, 6, 1),
+    )
+
+    assert len(weather) == 1
+    day = weather[0]
+    assert day.source == "forecast"
+    assert day.date == date(2026, 6, 3)
+    assert day.referenceDate is None
+    assert day.precipitationProbabilityMax == 90
+    assert day.tempMinC == 0.0
+    assert day.tempMaxC == 23.0
+
+    blocks = {block.timeBlock: block for block in day.blocks}
+    assert blocks["AFTERNOON"].condition == "Thunderstorm"
+    assert blocks["AFTERNOON"].precipitationMm == 20.0
+    assert blocks["AFTERNOON"].temperatureC == 15.5
+    assert blocks["MORNING"].condition == "Clear sky"
+    assert blocks["MORNING"].precipitationMm == 0.0
+
+    assert calls[0]["url"] == "https://meteo.example/forecast"
+
+
+@pytest.mark.asyncio
+async def test_open_meteo_falls_back_to_previous_year_for_far_future(monkeypatch):
+    calls = _patch_open_meteo(monkeypatch)
+    provider = OpenMeteoWeatherProvider(
+        "https://meteo.example/forecast",
+        "https://meteo.example/archive",
+        forecast_max_days=16,
+    )
+
+    weather = await provider.get_weather(
+        coordinates=Coordinates(lat=48.1, lon=11.5),
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 1),
+        today=date(2026, 6, 1),
+    )
+
+    assert len(weather) == 1
+    day = weather[0]
+    assert day.source == "historical"
+    assert day.date == date(2026, 7, 1)
+    assert day.referenceDate == date(2025, 7, 1)
+    assert day.precipitationProbabilityMax is None
+    assert "2025-07-01" in day.summary
+
+    assert calls[0]["url"] == "https://meteo.example/archive"
+    assert calls[0]["params"]["start_date"] == "2025-07-01"
+
+
+@pytest.mark.asyncio
+async def test_open_meteo_mixes_forecast_and_historical_across_boundary(monkeypatch):
+    calls = _patch_open_meteo(monkeypatch)
+    provider = OpenMeteoWeatherProvider(
+        "https://meteo.example/forecast",
+        "https://meteo.example/archive",
+        forecast_max_days=16,
+    )
+
+    # today + 15 .. today + 18, with a 16-day forecast horizon (cutoff at today+16).
+    weather = await provider.get_weather(
+        coordinates=Coordinates(lat=48.1, lon=11.5),
+        start_date=date(2026, 6, 16),
+        end_date=date(2026, 6, 19),
+        today=date(2026, 6, 1),
+    )
+
+    assert [day.source for day in weather] == [
+        "forecast",
+        "forecast",
+        "historical",
+        "historical",
+    ]
+    assert [day.date for day in weather] == [
+        date(2026, 6, 16),
+        date(2026, 6, 17),
+        date(2026, 6, 18),
+        date(2026, 6, 19),
+    ]
+    assert weather[2].referenceDate == date(2025, 6, 18)
+
+    urls = [call["url"] for call in calls]
+    assert "https://meteo.example/forecast" in urls
+    assert "https://meteo.example/archive" in urls
+
+
+@pytest.mark.asyncio
+async def test_open_meteo_returns_historical_even_if_forecast_segment_fails(monkeypatch):
+    calls = []
+
+    async def fake_get(self, url, params=None):
+        calls.append(url)
+        if "forecast" in url:
+            return httpx.Response(
+                400,
+                json={"error": True, "reason": "end_date out of allowed range"},
+                request=httpx.Request("GET", url),
+            )
+        start = date.fromisoformat(params["start_date"])
+        end = date.fromisoformat(params["end_date"])
+        return httpx.Response(
+            200,
+            json=_hourly_payload(start, end, include_probability=False),
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    provider = OpenMeteoWeatherProvider(
+        "https://meteo.example/forecast",
+        "https://meteo.example/archive",
+        forecast_max_days=16,
+    )
+
+    # Two forecast days (which fail) and two historical days (which succeed).
+    weather = await provider.get_weather(
+        coordinates=Coordinates(lat=48.1, lon=11.5),
+        start_date=date(2026, 6, 16),
+        end_date=date(2026, 6, 19),
+        today=date(2026, 6, 1),
+    )
+
+    # The forecast 400 must not wipe out the historical days.
+    assert [day.source for day in weather] == ["historical", "historical"]
+    assert [day.date for day in weather] == [date(2026, 6, 18), date(2026, 6, 19)]
+
+
+def test_prior_year_clamps_leap_day():
+    from app.services.providers.open_meteo_provider import _prior_year
+
+    assert _prior_year(date(2028, 2, 29)) == date(2027, 2, 28)
+    assert _prior_year(date(2026, 7, 1)) == date(2025, 7, 1)

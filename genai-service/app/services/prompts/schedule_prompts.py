@@ -29,6 +29,7 @@ def get_schedule_generation_prompt(
         "expectedDates": [date.isoformat() for date in expected_dates],
     }
     real_events = _real_events_context(travel_context)
+    weather = _weather_context(travel_context)
 
     return f"""
 Create a complete travel schedule for the trip request below.
@@ -38,6 +39,9 @@ Trip request:
 
 Real events available for this destination:
 {_json(real_events)}
+
+Weather outlook per day and time block (temperatureC in °C, precipitationMm in mm):
+{_json(weather)}
 
 Return JSON only. The response must match this exact shape:
 {{
@@ -72,6 +76,14 @@ Hard requirements:
 - Generate normal attractions, landmarks, lakes, parks, and sightseeing ideas from your destination knowledge
   when they fit better than the available events.
 - If event metadata does not say whether an activity is indoor/outdoor or cultural/sporty, infer reasonable activity fields.
+- Use the weather outlook to plan each day. Match every activity to its own date and timeBlock weather entry.
+- On time blocks with rain, drizzle, snow, thunderstorms, or high precipitation, prefer indoor or sheltered
+  activities and set isIndoor to true; avoid hikes, long walks, and other exposed outdoor plans in those blocks.
+- On clear, mainly clear, or partly cloudy time blocks, favor outdoor activities that match the vibe.
+- Weather entries with "source": "historical" are seasonal estimates from last year, not a forecast; treat them as a
+  general expectation and still avoid scheduling weather-sensitive outdoor activities on historically bad-weather blocks.
+- When weather forces an indoor choice, keep the activity realistic and aligned with the requested vibe.
+- Do not mention the weather data, forecasts, or temperatures in activity titles unless it is natural to the plan.
 - Descriptions must be concrete enough for a traveler to understand what they will do.
 - durationMinutes must be an integer from 30 to 360.
 - isIndoor must be true for mostly indoor activities and false for mostly outdoor activities.
@@ -141,6 +153,33 @@ def _enum_values(enum_type) -> str:
 
 def _json(value) -> str:
     return json.dumps(value, indent=2, sort_keys=True)
+
+
+def _weather_context(travel_context: TravelContext | None):
+    if travel_context is None:
+        return []
+
+    days = []
+    for day in travel_context.weather:
+        days.append(
+            {
+                "date": day.date,
+                "source": day.source,
+                "summary": day.summary,
+                "tempMinC": day.tempMinC,
+                "tempMaxC": day.tempMaxC,
+                "precipitationProbabilityMax": day.precipitationProbabilityMax,
+                "blocks": {
+                    block.timeBlock: {
+                        "condition": block.condition,
+                        "temperatureC": block.temperatureC,
+                        "precipitationMm": block.precipitationMm,
+                    }
+                    for block in day.blocks
+                },
+            }
+        )
+    return days
 
 
 def _real_events_context(travel_context: TravelContext | None):

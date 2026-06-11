@@ -5,7 +5,7 @@ from app.services.schedule_service import ScheduleService
 
 
 class NullTravelContextClient:
-    async def get_trip_context(self, preferences):
+    async def get_trip_context(self, preferences, include_events=True):
         return None
 
 

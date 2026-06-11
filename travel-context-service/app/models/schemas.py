@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Any, Optional
+import datetime
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -20,9 +20,10 @@ class GeocodedLocation(BaseModel):
 
 class TripContextRequest(BaseModel):
     destination: str = Field(min_length=1)
-    startDate: date
-    endDate: date
+    startDate: datetime.date
+    endDate: datetime.date
     vibe: str = Field(min_length=1)
+    includeEvents: bool = True
 
 
 class PlaceCandidate(BaseModel):
@@ -62,8 +63,34 @@ class EventCandidate(BaseModel):
     score: float = 0.0
 
 
+TimeBlock = Literal["MORNING", "NOON", "AFTERNOON", "EVENING", "NIGHT"]
+
+
+class WeatherBlock(BaseModel):
+    """Aggregated weather for one activity time block of a day."""
+
+    timeBlock: TimeBlock
+    condition: str
+    temperatureC: Optional[float] = None
+    precipitationMm: float = 0.0
+
+
+class WeatherDaily(BaseModel):
+    """Per-day weather, broken down into activity time blocks."""
+
+    date: datetime.date
+    source: Literal["forecast", "historical"]
+    referenceDate: Optional[datetime.date] = None
+    summary: str
+    tempMinC: Optional[float] = None
+    tempMaxC: Optional[float] = None
+    precipitationProbabilityMax: Optional[int] = None
+    blocks: list[WeatherBlock] = Field(default_factory=list)
+
+
 class TripContextResponse(BaseModel):
     destination: str
     coordinates: Coordinates
     events: list[EventCandidate] = Field(default_factory=list)
     places: list[PlaceCandidate] = Field(default_factory=list)
+    weather: list[WeatherDaily] = Field(default_factory=list)

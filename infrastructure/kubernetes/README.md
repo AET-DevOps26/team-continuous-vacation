@@ -116,6 +116,11 @@ Required GitHub repository secrets:
 - `AZURE_LLM_API_KEY`: Azure OpenAI API key for `genai-service`
 - `SERPAPI_API_KEY`: SerpApi key for Google Events lookup in `travel-context-service`
 
+The per-day weather enrichment in `travel-context-service` uses the free, keyless
+Open-Meteo forecast and historical-archive APIs, so it needs no secret. It is
+configured via the `travelContextService.config` values (`OPEN_METEO_*`,
+`WEATHER_ENABLED`, `WEATHER_FORECAST_MAX_DAYS`).
+
 Optional GitHub repository secrets:
 
 - `POSTGRES_PASSWORD`: PostgreSQL password for the chart Secret. Defaults to `trippassword`.

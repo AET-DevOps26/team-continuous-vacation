@@ -4,9 +4,16 @@ import logging
 from datetime import date, timedelta
 
 from app.config.settings import settings
-from app.models.schemas import EventCandidate, GeocodedLocation, TripContextRequest, TripContextResponse
+from app.models.schemas import (
+    EventCandidate,
+    GeocodedLocation,
+    TripContextRequest,
+    TripContextResponse,
+    WeatherDaily,
+)
 from app.services.cache import TtlCache
 from app.services.providers.nominatim_provider import NominatimProvider
+from app.services.providers.open_meteo_provider import OpenMeteoWeatherProvider
 from app.services.providers.overpass_provider import OverpassProvider
 from app.services.providers.photon_provider import PhotonProvider
 from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
@@ -25,32 +32,47 @@ class TravelContextService:
         fallback_geocoder: PhotonProvider | None = None,
         place_provider: OverpassProvider | None = None,
         events_provider: SerpApiEventsProvider | None = None,
+        weather_provider: OpenMeteoWeatherProvider | None = None,
         geocode_cache: TtlCache[GeocodedLocation] | None = None,
         events_cache: TtlCache[list[EventCandidate]] | None = None,
+        weather_cache: TtlCache[list[WeatherDaily]] | None = None,
     ):
         self.geocoder = geocoder or NominatimProvider(settings.NOMINATIM_BASE_URL, settings.HTTP_USER_AGENT)
         self.fallback_geocoder = fallback_geocoder or PhotonProvider(settings.PHOTON_BASE_URL, settings.HTTP_USER_AGENT)
         self.place_provider = place_provider or OverpassProvider(settings.OVERPASS_BASE_URL, settings.HTTP_USER_AGENT)
         self.events_provider = events_provider or SerpApiEventsProvider(settings.SERPAPI_BASE_URL, settings.SERPAPI_API_KEY)
+        self.weather_provider = weather_provider or OpenMeteoWeatherProvider(
+            settings.OPEN_METEO_FORECAST_BASE_URL,
+            settings.OPEN_METEO_ARCHIVE_BASE_URL,
+            settings.WEATHER_FORECAST_MAX_DAYS,
+        )
         self.geocode_cache = geocode_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.events_cache = events_cache or TtlCache(settings.CACHE_TTL_SECONDS)
+        self.weather_cache = weather_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.ranker = PlaceRanker()
 
     async def build_trip_context(self, request: TripContextRequest) -> TripContextResponse:
         logger.info(
-            "Building travel context destination=%s startDate=%s endDate=%s vibe=%s",
+            "Building travel context destination=%s startDate=%s endDate=%s vibe=%s includeEvents=%s",
             request.destination,
             request.startDate,
             request.endDate,
             request.vibe,
+            request.includeEvents,
         )
         location = await self._geocode(request.destination)
-        events = await self._search_events(location, request.startDate, request.endDate)
+        events = (
+            await self._search_events(location, request.startDate, request.endDate)
+            if request.includeEvents
+            else []
+        )
+        weather = await self._get_weather(location, request.startDate, request.endDate)
         logger.info(
-            "Built travel context destination=%s validated_location=%s events=%s",
+            "Built travel context destination=%s validated_location=%s events=%s weather_days=%s",
             request.destination,
             location.name,
             len(events),
+            len(weather),
         )
         logger.info(
             "Top events destination=%s events=%s",
@@ -71,6 +93,7 @@ class TravelContextService:
             coordinates=location.coordinates,
             events=events,
             places=[],
+            weather=weather,
         )
 
     async def _geocode(self, destination: str) -> GeocodedLocation:
@@ -142,6 +165,63 @@ class TravelContextService:
         limited_events = events[: settings.EVENT_SEARCH_LIMIT]
         self.events_cache.set(cache_key, limited_events)
         return limited_events
+
+    async def _get_weather(
+        self,
+        location: GeocodedLocation,
+        start_date: date,
+        end_date: date,
+    ) -> list[WeatherDaily]:
+        if not settings.WEATHER_ENABLED:
+            return []
+
+        coordinates = location.coordinates
+        cache_key = (
+            f"weather:{coordinates.lat:.3f}:{coordinates.lon:.3f}:"
+            f"{start_date.isoformat()}:{end_date.isoformat()}"
+        )
+        cached = self.weather_cache.get(cache_key)
+        if cached is not None:
+            logger.info(
+                "Weather cache hit lat=%s lon=%s start=%s end=%s days=%s",
+                coordinates.lat,
+                coordinates.lon,
+                start_date,
+                end_date,
+                len(cached),
+            )
+            return cached
+
+        try:
+            weather = await self.weather_provider.get_weather(
+                coordinates=coordinates,
+                start_date=start_date,
+                end_date=end_date,
+                today=date.today(),
+            )
+        except Exception as error:
+            # Weather is a best-effort enhancement; never fail the whole context.
+            logger.warning(
+                "Weather lookup failed lat=%s lon=%s start=%s end=%s error=%s",
+                coordinates.lat,
+                coordinates.lon,
+                start_date,
+                end_date,
+                error,
+            )
+            return []
+
+        logger.info(
+            "Built weather lat=%s lon=%s start=%s end=%s days=%s sources=%s",
+            coordinates.lat,
+            coordinates.lon,
+            start_date,
+            end_date,
+            len(weather),
+            [day.source for day in weather],
+        )
+        self.weather_cache.set(cache_key, weather)
+        return weather
 
 
 def _google_country_code(country_code: str | None) -> str:
