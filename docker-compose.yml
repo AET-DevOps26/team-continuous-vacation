@@ -80,6 +80,7 @@ services:
       - "8090:8090"
     env_file:
       - ./travel-context-service/.env.example
+      - ./travel-context-service/.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
       interval: 10s

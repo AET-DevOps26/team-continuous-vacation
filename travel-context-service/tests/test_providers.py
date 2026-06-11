@@ -9,7 +9,10 @@ from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
 
 @pytest.mark.asyncio
 async def test_nominatim_response_maps_to_coordinates(monkeypatch):
+    captured_params = {}
+
     async def fake_get(self, url, params=None, headers=None):
+        captured_params.update(params)
         return httpx.Response(
             200,
             json=[
@@ -17,6 +20,7 @@ async def test_nominatim_response_maps_to_coordinates(monkeypatch):
                     "lat": "48.137154",
                     "lon": "11.576124",
                     "name": "München",
+                    "namedetails": {"name:en": "Munich"},
                     "display_name": "München, Bayern, Deutschland",
                     "address": {"country_code": "de"},
                 }
@@ -29,7 +33,8 @@ async def test_nominatim_response_maps_to_coordinates(monkeypatch):
 
     location = await provider.geocode("Munich")
 
-    assert location.name == "München"
+    assert captured_params["namedetails"] == 1
+    assert location.name == "Munich"
     assert location.countryCode == "de"
     assert location.coordinates.lat == 48.137154
     assert location.coordinates.lon == 11.576124
