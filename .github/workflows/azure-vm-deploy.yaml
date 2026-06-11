@@ -145,6 +145,7 @@ jobs:
         if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
         env:
           AZURE_LLM_API_KEY: ${{ secrets.AZURE_LLM_API_KEY }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
@@ -161,6 +162,7 @@ jobs:
             -e "branch=${GITHUB_REF_NAME}" \
             -e "azure_llm_api_key=${AZURE_LLM_API_KEY}" \
             -e "azure_llm_base_url=${AZURE_LLM_BASE_URL}" \
+            -e "serpapi_api_key=${SERPAPI_API_KEY}" \
             -e "postgres_password=${POSTGRES_PASSWORD}" \
             -e "jwt_secret=${JWT_SECRET}"
 

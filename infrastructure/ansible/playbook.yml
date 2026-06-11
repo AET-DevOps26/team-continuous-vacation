@@ -69,6 +69,25 @@
         mode: "0600"
       when: azure_llm_api_key is defined
 
+    - name: Copy environment file for travel-context-service
+      copy:
+        dest: "{{ app_dir }}/travel-context-service/.env"
+        content: |
+          NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org
+          PHOTON_BASE_URL=https://photon.komoot.io
+          OVERPASS_BASE_URL=https://overpass-api.de/api/interpreter
+          SERPAPI_BASE_URL=https://serpapi.com/search
+          SERPAPI_API_KEY={{ serpapi_api_key | default('') }}
+          HTTP_USER_AGENT=TripTailor/1.0 (https://github.com/AET-DevOps26/team-continuous-vacation)
+          PLACE_SEARCH_RADIUS_METERS=8000
+          PLACE_SEARCH_LIMIT=40
+          EVENT_SEARCH_LIMIT=10
+          OVERPASS_TIMEOUT_SECONDS=12
+          CACHE_TTL_SECONDS=21600
+          LOG_LEVEL=INFO
+        mode: "0600"
+      no_log: true
+
     - name: Build and start services
       shell: docker compose up -d --build --force-recreate
       args:
