@@ -55,6 +55,29 @@ genaiService:
     AZURE_LLM_API_KEY: ""
   resources: {}
 
+travelContextService:
+  image:
+    repository: triptailor/travel-context-service
+    tag: latest
+  service:
+    name: travel-context-service
+    port: 8090
+  replicaCount: 1
+  config:
+    NOMINATIM_BASE_URL: https://nominatim.openstreetmap.org
+    PHOTON_BASE_URL: https://photon.komoot.io
+    OVERPASS_BASE_URL: https://overpass-api.de/api/interpreter
+    SERPAPI_BASE_URL: https://serpapi.com/search
+    HTTP_USER_AGENT: "TripTailor/1.0 (https://github.com/AET-DevOps26/team-continuous-vacation)"
+    PLACE_SEARCH_RADIUS_METERS: "8000"
+    PLACE_SEARCH_LIMIT: "40"
+    EVENT_SEARCH_LIMIT: "10"
+    OVERPASS_TIMEOUT_SECONDS: "12"
+    CACHE_TTL_SECONDS: "21600"
+  secrets:
+    SERPAPI_API_KEY: ""
+  resources: {}
+
 backend:
   image:
     repository: triptailor/backend

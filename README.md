@@ -31,3 +31,7 @@ The user opens the app and enters "Munich, 3 days in mid may, sporty vibe." The 
 
 **Scenario 2: The Rainy Day Swap (Micro-Regeneration)**
 While reviewing their saved trip, the user looks at Day 2, Afternoon: "Walking tour of the English Garden." Realizing the forecast calls for rain, they click an "Edit" button on that specific activity block and type "Make this indoor." The AI processes this targeted request and suggests "Visit the Deutsches Museum." The schedule instantly updates that single card on the screen, keeping the morning and evening plans exactly as they were.
+
+## Local Configuration
+
+The travel context service uses SerpApi for Google Events. Create `travel-context-service/.env` from `travel-context-service/.env.example` and set `SERPAPI_API_KEY`; without it, event lookup is skipped and trip context responses contain no events.

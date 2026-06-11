@@ -6,6 +6,7 @@ The chart mirrors the working `docker-compose.yml` topology:
 
 - `db`: PostgreSQL 17 with a persistent volume
 - `persistence-service`: Spring Boot service on port 8081
+- `travel-context-service`: FastAPI enrichment service on port 8090
 - `genai-service`: FastAPI service on port 8000
 - `backend`: Spring Boot app API on port 8080
 - `frontend`: nginx-served React app on port 3000
@@ -46,6 +47,7 @@ Build the local images:
 docker build -t triptailor/backend:latest --build-context api-spec=api-specification backend
 docker build -t triptailor/persistence-service:latest --build-context api-spec=api-specification persistence-service
 docker build -t triptailor/genai-service:latest genai-service
+docker build -t triptailor/travel-context-service:latest travel-context-service
 docker build -t triptailor/frontend:latest --build-context api-spec=api-specification frontend
 ```
 
@@ -63,6 +65,7 @@ Wait for the rollout:
 ```bash
 kubectl -n triptailor-local rollout status deploy/db
 kubectl -n triptailor-local rollout status deploy/persistence-service
+kubectl -n triptailor-local rollout status deploy/travel-context-service
 kubectl -n triptailor-local rollout status deploy/genai-service
 kubectl -n triptailor-local rollout status deploy/backend
 kubectl -n triptailor-local rollout status deploy/frontend
@@ -97,11 +100,12 @@ kubectl delete namespace triptailor-local
 
 GitHub Actions publishes images and deploys them to the AET namespace. The workflow is `.github/workflows/images.yaml`.
 
-It publishes the four images to GitHub Container Registry as:
+It publishes the five images to GitHub Container Registry as:
 
 - `ghcr.io/aet-devops26/team-continuous-vacation/backend:<git-sha>`
 - `ghcr.io/aet-devops26/team-continuous-vacation/persistence-service:<git-sha>`
 - `ghcr.io/aet-devops26/team-continuous-vacation/genai-service:<git-sha>`
+- `ghcr.io/aet-devops26/team-continuous-vacation/travel-context-service:<git-sha>`
 - `ghcr.io/aet-devops26/team-continuous-vacation/frontend:<git-sha>`
 
 Use the Git commit SHA as the Helm image tag. Avoid `latest` for reproducible cluster deployments. The workflow uses the short commit SHA for both publishing and deployment.
@@ -110,6 +114,7 @@ Required GitHub repository secrets:
 
 - `AET_KUBECONFIG`: kubeconfig YAML for the AET cluster
 - `AZURE_LLM_API_KEY`: Azure OpenAI API key for `genai-service`
+- `SERPAPI_API_KEY`: SerpApi key for Google Events lookup in `travel-context-service`
 
 Optional GitHub repository secrets:
 
@@ -141,6 +146,8 @@ Set:
 - `postgres.auth.password`
 - `backend.secrets.JWT_SECRET`
 - `genaiService.secrets.AZURE_LLM_API_KEY`
+- `travelContextService.image.repository` and `travelContextService.image.tag`
+- `travelContextService.secrets.SERPAPI_API_KEY`
 - optional `global.imagePullSecrets`
 - optional `ingress` settings if the cluster provides an ingress controller and hostname
 
@@ -156,6 +163,7 @@ Check:
 
 ```bash
 kubectl -n team-continuous-vacation get pods,svc,ingress
+kubectl -n team-continuous-vacation rollout status deploy/travel-context-service
 kubectl -n team-continuous-vacation rollout status deploy/backend
 kubectl -n team-continuous-vacation rollout status deploy/frontend
 ```

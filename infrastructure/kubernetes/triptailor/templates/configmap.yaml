@@ -7,6 +7,7 @@ metadata:
 data:
   PERSISTENCE_BASE_URL: "http://{{ .Values.persistenceService.service.name }}:{{ .Values.persistenceService.service.port }}"
   GENAI_BASE_URL: "http://{{ .Values.genaiService.service.name }}:{{ .Values.genaiService.service.port }}"
+  TRAVEL_CONTEXT_BASE_URL: "http://{{ .Values.travelContextService.service.name }}:{{ .Values.travelContextService.service.port }}"
   SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ .Values.postgres.service.name }}:{{ .Values.postgres.service.port }}/{{ .Values.postgres.auth.database }}"
   SPRING_DATASOURCE_USERNAME: {{ .Values.postgres.auth.username | quote }}
   JWT_ISSUER: {{ .Values.backend.config.JWT_ISSUER | quote }}
@@ -20,3 +21,13 @@ data:
   LOCAL_LLM_API_KEY: {{ .Values.genaiService.config.LOCAL_LLM_API_KEY | quote }}
   LOCAL_LLM_BASE_URL: {{ .Values.genaiService.config.LOCAL_LLM_BASE_URL | quote }}
   LOG_LEVEL: {{ .Values.genaiService.config.LOG_LEVEL | quote }}
+  NOMINATIM_BASE_URL: {{ .Values.travelContextService.config.NOMINATIM_BASE_URL | quote }}
+  PHOTON_BASE_URL: {{ .Values.travelContextService.config.PHOTON_BASE_URL | quote }}
+  OVERPASS_BASE_URL: {{ .Values.travelContextService.config.OVERPASS_BASE_URL | quote }}
+  SERPAPI_BASE_URL: {{ .Values.travelContextService.config.SERPAPI_BASE_URL | quote }}
+  HTTP_USER_AGENT: {{ .Values.travelContextService.config.HTTP_USER_AGENT | quote }}
+  PLACE_SEARCH_RADIUS_METERS: {{ .Values.travelContextService.config.PLACE_SEARCH_RADIUS_METERS | quote }}
+  PLACE_SEARCH_LIMIT: {{ .Values.travelContextService.config.PLACE_SEARCH_LIMIT | quote }}
+  EVENT_SEARCH_LIMIT: {{ .Values.travelContextService.config.EVENT_SEARCH_LIMIT | quote }}
+  OVERPASS_TIMEOUT_SECONDS: {{ .Values.travelContextService.config.OVERPASS_TIMEOUT_SECONDS | quote }}
+  CACHE_TTL_SECONDS: {{ .Values.travelContextService.config.CACHE_TTL_SECONDS | quote }}

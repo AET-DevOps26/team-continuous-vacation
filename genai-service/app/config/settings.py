@@ -30,6 +30,9 @@ class Settings(BaseSettings):
 
     # Service Configuration
     LOG_LEVEL: str
+    TRAVEL_CONTEXT_BASE_URL: str = "http://travel-context-service:8090"
+    TRAVEL_CONTEXT_ENABLED: bool = True
+    TRAVEL_CONTEXT_TIMEOUT_SECONDS: float = 20.0
 
 
 settings = Settings()

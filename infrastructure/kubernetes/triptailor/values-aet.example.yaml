@@ -40,6 +40,15 @@ genaiService:
   secrets:
     AZURE_LLM_API_KEY: change-me
 
+travelContextService:
+  image:
+    repository: ghcr.io/aet-devops26/team-continuous-vacation/travel-context-service
+    tag: change-me-to-git-sha
+  config:
+    HTTP_USER_AGENT: "TripTailor/1.0 (https://github.com/AET-DevOps26/team-continuous-vacation)"
+  secrets:
+    SERPAPI_API_KEY: change-me
+
 backend:
   image:
     repository: ghcr.io/aet-devops26/team-continuous-vacation/backend

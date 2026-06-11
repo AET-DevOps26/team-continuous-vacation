@@ -1,0 +1,173 @@
+name: Deploy to Azure VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: Terraform action to run
+        required: true
+        default: apply
+        type: choice
+        options:
+          - apply
+          - destroy
+      deploy_after_apply:
+        description: Run Ansible deployment after Terraform apply
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  push:
+    branches: [ "main" ]
+
+env:
+  TF_IN_AUTOMATION: "true"
+  ARM_USE_OIDC: "true"
+  ARM_USE_AZUREAD: "true"
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'triptailor-rg' }}
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'polandcentral' }}
+  AZURE_VM_SIZE: ${{ vars.AZURE_VM_SIZE || 'Standard_B2ats_v2' }}
+  AZURE_VM_ADMIN_USERNAME: ${{ vars.AZURE_VM_ADMIN_USERNAME || 'tripadmin' }}
+  AZURE_LLM_BASE_URL: ${{ vars.AZURE_LLM_BASE_URL || secrets.AZURE_LLM_BASE_URL }}
+
+jobs:
+  deploy:
+    name: Provision and deploy
+    runs-on: ubuntu-latest
+    environment: azure
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Prepare VM public key
+        env:
+          AZURE_VM_SSH_PUBLIC_KEY: ${{ secrets.AZURE_VM_SSH_PUBLIC_KEY }}
+        run: |
+          install -m 700 -d "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$AZURE_VM_SSH_PUBLIC_KEY" > "$RUNNER_TEMP/ssh/triptailor.pub"
+          chmod 600 "$RUNNER_TEMP/ssh/triptailor.pub"
+
+      - name: Terraform fmt
+        working-directory: infrastructure/terraform
+        run: terraform fmt -check
+
+      - name: Terraform init
+        working-directory: infrastructure/terraform
+        run: terraform init
+
+      - name: Terraform validate
+        working-directory: infrastructure/terraform
+        run: terraform validate
+
+      - name: Terraform plan
+        working-directory: infrastructure/terraform
+        run: |
+          plan_args=()
+          if [ "${{ github.event.inputs.terraform_action }}" = "destroy" ]; then
+            plan_args+=("-destroy")
+          fi
+
+          terraform plan "${plan_args[@]}" -out=tfplan \
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var="resource_group_name=${AZURE_RESOURCE_GROUP}" \
+            -var="location=${AZURE_LOCATION}" \
+            -var="vm_size=${AZURE_VM_SIZE}" \
+            -var="admin_username=${AZURE_VM_ADMIN_USERNAME}" \
+            -var="ssh_public_key_path=$RUNNER_TEMP/ssh/triptailor.pub"
+
+      - name: Terraform apply
+        working-directory: infrastructure/terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Capture VM IP
+        id: terraform_output
+        if: github.event.inputs.terraform_action != 'destroy'
+        working-directory: infrastructure/terraform
+        run: |
+          vm_public_ip="$(terraform output -raw vm_public_ip)"
+          echo "vm_public_ip=${vm_public_ip}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Ansible
+        if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+
+      - name: Prepare Ansible SSH
+        if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
+        env:
+          AZURE_VM_SSH_PRIVATE_KEY: ${{ secrets.AZURE_VM_SSH_PRIVATE_KEY }}
+          VM_PUBLIC_IP: ${{ steps.terraform_output.outputs.vm_public_ip }}
+        run: |
+          printf '%s\n' "$AZURE_VM_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/triptailor"
+          chmod 600 "$RUNNER_TEMP/ssh/triptailor"
+
+          cat > "$RUNNER_TEMP/inventory.ini" <<EOF
+          [triptailor]
+          ${VM_PUBLIC_IP} ansible_user=${AZURE_VM_ADMIN_USERNAME} ansible_ssh_private_key_file=${RUNNER_TEMP}/ssh/triptailor ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+          EOF
+
+          for attempt in {1..30}; do
+            if ssh -i "$RUNNER_TEMP/ssh/triptailor" \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=5 \
+              "${AZURE_VM_ADMIN_USERNAME}@${VM_PUBLIC_IP}" true; then
+              exit 0
+            fi
+
+            echo "Waiting for SSH on ${VM_PUBLIC_IP} (${attempt}/30)..."
+            sleep 10
+          done
+
+          echo "VM did not become reachable over SSH." >&2
+          exit 1
+
+      - name: Deploy with Ansible
+        if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
+        env:
+          AZURE_LLM_API_KEY: ${{ secrets.AZURE_LLM_API_KEY }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          if [ -z "${AZURE_LLM_API_KEY}" ] || [ -z "${AZURE_LLM_BASE_URL}" ]; then
+            echo "AZURE_LLM_API_KEY and AZURE_LLM_BASE_URL repository secrets are required." >&2
+            exit 1
+          fi
+
+          POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-trippassword}"
+          JWT_SECRET="${JWT_SECRET:-dev-only-change-this-secret-to-at-least-32-bytes}"
+
+          ansible-playbook -i "$RUNNER_TEMP/inventory.ini" infrastructure/ansible/playbook.yml \
+            -e "repo_url=https://github.com/${GITHUB_REPOSITORY}.git" \
+            -e "branch=${GITHUB_REF_NAME}" \
+            -e "azure_llm_api_key=${AZURE_LLM_API_KEY}" \
+            -e "azure_llm_base_url=${AZURE_LLM_BASE_URL}" \
+            -e "postgres_password=${POSTGRES_PASSWORD}" \
+            -e "jwt_secret=${JWT_SECRET}"
+
+      - name: Show application URL
+        if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
+        env:
+          VM_PUBLIC_IP: ${{ steps.terraform_output.outputs.vm_public_ip }}
+        run: |
+          echo "Frontend: http://${VM_PUBLIC_IP}:3000"
+          echo "Backend:  http://${VM_PUBLIC_IP}:8080"

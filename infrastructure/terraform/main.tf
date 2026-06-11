@@ -1,4 +1,12 @@
 terraform {
+  backend "azurerm" {
+    resource_group_name  = "triptailor-tfstate-rg"
+    storage_account_name = "continousvacationstorage"
+    container_name       = "tfstate"
+    key                  = "triptailor.tfstate"
+    use_azuread_auth     = true
+  }
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
