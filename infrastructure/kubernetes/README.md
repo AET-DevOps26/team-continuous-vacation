@@ -89,6 +89,25 @@ http://localhost:30080/api/debug/instance
 
 The response includes the backend pod/container hostname. Seeing more than one distinct hostname proves requests are being distributed through the `backend` Kubernetes Service.
 
+## Demonstrate Backend Autoscaling
+
+Run:
+
+```bash
+./scripts/demo-autoscaling.sh
+```
+
+The default demo enables the backend `HorizontalPodAutoscaler`, waits briefly,
+and then simulates a CPU pressure signal by raising the HPA minimum replica count
+to `2`. This avoids creating heavy CPU load on a laptop while still showing the
+HPA-controlled backend deployment scaling out.
+
+To run a real CPU-based HPA demo instead, the cluster needs metrics-server:
+
+```bash
+MOCK_CPU=0 ./scripts/demo-autoscaling.sh
+```
+
 Uninstall:
 
 ```bash

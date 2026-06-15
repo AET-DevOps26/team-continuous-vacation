@@ -96,7 +96,15 @@ backend:
     JWT_TTL_DAYS: "30"
   secrets:
     JWT_SECRET: dev-only-change-this-secret-to-at-least-32-bytes
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
 
 frontend:
   image:
