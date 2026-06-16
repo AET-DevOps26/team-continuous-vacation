@@ -7,6 +7,11 @@ LOCAL_VALUES="${CHART_DIR}/values-local.yaml"
 NAMESPACE="${NAMESPACE:-triptailor-local}"
 RELEASE="${RELEASE:-triptailor}"
 BACKEND_REPLICAS="${BACKEND_REPLICAS:-}"
+BACKEND_AUTOSCALING_ENABLED="${BACKEND_AUTOSCALING_ENABLED:-}"
+BACKEND_AUTOSCALING_MIN_REPLICAS="${BACKEND_AUTOSCALING_MIN_REPLICAS:-}"
+BACKEND_AUTOSCALING_MAX_REPLICAS="${BACKEND_AUTOSCALING_MAX_REPLICAS:-}"
+BACKEND_AUTOSCALING_TARGET_CPU="${BACKEND_AUTOSCALING_TARGET_CPU:-}"
+BACKEND_CPU_REQUEST="${BACKEND_CPU_REQUEST:-}"
 FORCE_BUILD_IMAGES="${FORCE_BUILD_IMAGES:-0}"
 
 HELM_VERSION="${HELM_VERSION:-v3.15.4}"
@@ -103,6 +108,26 @@ helm_args=(
 
 if [[ -n "${BACKEND_REPLICAS}" ]]; then
 	helm_args+=(--set "backend.replicaCount=${BACKEND_REPLICAS}")
+fi
+
+if [[ -n "${BACKEND_AUTOSCALING_ENABLED}" ]]; then
+	helm_args+=(--set "backend.autoscaling.enabled=${BACKEND_AUTOSCALING_ENABLED}")
+fi
+
+if [[ -n "${BACKEND_AUTOSCALING_MIN_REPLICAS}" ]]; then
+	helm_args+=(--set "backend.autoscaling.minReplicas=${BACKEND_AUTOSCALING_MIN_REPLICAS}")
+fi
+
+if [[ -n "${BACKEND_AUTOSCALING_MAX_REPLICAS}" ]]; then
+	helm_args+=(--set "backend.autoscaling.maxReplicas=${BACKEND_AUTOSCALING_MAX_REPLICAS}")
+fi
+
+if [[ -n "${BACKEND_AUTOSCALING_TARGET_CPU}" ]]; then
+	helm_args+=(--set "backend.autoscaling.targetCPUUtilizationPercentage=${BACKEND_AUTOSCALING_TARGET_CPU}")
+fi
+
+if [[ -n "${BACKEND_CPU_REQUEST}" ]]; then
+	helm_args+=(--set-string "backend.resources.requests.cpu=${BACKEND_CPU_REQUEST}")
 fi
 
 "${HELM_BIN}" "${helm_args[@]}"
