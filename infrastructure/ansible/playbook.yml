@@ -6,8 +6,57 @@
     app_dir: /opt/triptailor
     repo_url: "https://github.com/AET-DevOps26/team-continuous-vacation.git"
     branch: main
+    swap_file: /swapfile
+    swap_size_mb: 8192
 
   tasks:
+    # --- Memory safety net: the VM has ~1 GiB RAM, but building the two Gradle
+    # (JVM) images plus the node frontend peaks well above that. Without swap the
+    # OOM killer thrashes and the box goes unresponsive. A swapfile absorbs the
+    # build-time burst; at runtime the services fit in RAM so swap stays cold.
+    - name: Create swapfile
+      command: "fallocate -l {{ swap_size_mb }}M {{ swap_file }}"
+      args:
+        creates: "{{ swap_file }}"
+
+    - name: Secure swapfile permissions
+      file:
+        path: "{{ swap_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Format swapfile
+      command: "mkswap {{ swap_file }}"
+      register: mkswap_result
+      changed_when: "'Setting up swapspace' in mkswap_result.stdout"
+      failed_when:
+        - mkswap_result.rc != 0
+        - "'already' not in mkswap_result.stderr"
+
+    - name: Enable swapfile
+      command: "swapon {{ swap_file }}"
+      register: swapon_result
+      changed_when: swapon_result.rc == 0
+      failed_when:
+        - swapon_result.rc != 0
+        - "'already' not in swapon_result.stderr"
+
+    - name: Persist swapfile in fstab
+      mount:
+        path: none
+        src: "{{ swap_file }}"
+        fstype: swap
+        opts: sw
+        state: present
+
+    - name: Tune swappiness (prefer RAM, swap only under pressure)
+      sysctl:
+        name: vm.swappiness
+        value: "10"
+        state: present
+        reload: true
+
     - name: Install prerequisites
       apt:
         name: [apt-transport-https, ca-certificates, curl, gnupg, lsb-release, git]
@@ -88,8 +137,25 @@
         mode: "0600"
       no_log: true
 
-    - name: Build and start services
-      shell: docker compose up -d --build --force-recreate
+    # Build images one service at a time. The default `up --build` builds every
+    # service in parallel, so both Gradle JVMs (+ node) compile at once and blow
+    # the memory budget. Serial builds keep only one heavy compile in flight, and
+    # the Gradle heap is capped so a single build can't balloon either.
+    - name: Build images sequentially
+      shell: docker compose build {{ item }}
+      args:
+        chdir: "{{ app_dir }}"
+      environment:
+        DOCKER_BUILDKIT: "1"
+      loop:
+        - persistence-service
+        - backend
+        - frontend
+        - genai-service
+        - travel-context-service
+
+    - name: Start services
+      shell: docker compose up -d --force-recreate
       args:
         chdir: "{{ app_dir }}"
 
