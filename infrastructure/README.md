@@ -20,7 +20,25 @@ Edit `terraform.tfvars`:
 - `subscription_id` — your Azure subscription ID (`az account show --query id -o tsv`)
 - `ssh_public_key_path` — path to your public key
 
-Use the same Terraform state storage account described in the GitHub Actions section below:
+Use the same Terraform state storage account described in the GitHub Actions section below.
+
+> **Local-only testing:** the `backend "azurerm"` block in `main.tf` points at the shared remote state (`continousvacationstorage` / `triptailor-tfstate-rg`). That storage account lives in the team subscription, so if you are logged into a different subscription (e.g. a personal *Azure for Students* one) `terraform init` fails with `403 AuthorizationPermissionMismatch` or `ResourceGroupNotFound`. To provision against your own subscription, comment out the backend block so Terraform uses local state, then `terraform init -reconfigure`:
+>
+> ```hcl
+> terraform {
+>   # comment out this block to try it locally
+>   # backend "azurerm" {
+>   #   resource_group_name  = "triptailor-tfstate-rg"
+>   #   storage_account_name = "continousvacationstorage"
+>   #   container_name       = "tfstate"
+>   #   key                  = "triptailor.tfstate"
+>   #   use_azuread_auth     = true
+>   # }
+>   ...
+> }
+> ```
+>
+> Do **not** commit this change — the backend block must stay enabled for CI and shared deployments.
 
 ```bash
 terraform init

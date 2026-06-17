@@ -2,6 +2,10 @@
 
 FROM eclipse-temurin:21-jdk-alpine AS deps
 WORKDIR /workspace
+# Cap the Gradle JVM heap so the build fits the low-RAM Azure VM. JAVA_TOOL_OPTIONS
+# is picked up automatically by every JVM the build spawns. Set only in the build
+# stages; the runtime stage (separate FROM) keeps JVM defaults.
+ENV JAVA_TOOL_OPTIONS="-Xmx512m"
 COPY gradlew .
 COPY gradle gradle
 COPY build.gradle.kts settings.gradle.kts ./
