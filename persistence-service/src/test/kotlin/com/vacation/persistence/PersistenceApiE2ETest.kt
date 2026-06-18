@@ -122,4 +122,106 @@ class PersistenceApiE2ETest {
 		mockMvc.delete("/trips/$tripId?travelerId=$travelerId")
 			.andExpect { status { isNoContent() } }
 	}
+
+	@Test
+	fun `duplicate traveler email returns conflict`() {
+		val email = "duplicate-${UUID.randomUUID()}@example.com"
+		val request = """{"email":"$email","passwordHash":"hash","isDemo":false}"""
+
+		mockMvc.post("/travelers") {
+			contentType = MediaType.APPLICATION_JSON
+			content = request
+		}.andExpect { status { isCreated() } }
+
+		mockMvc.post("/travelers") {
+			contentType = MediaType.APPLICATION_JSON
+			content = request
+		}.andExpect {
+			status { isConflict() }
+			jsonPath("$.type") { value("EMAIL_ALREADY_EXISTS") }
+		}
+	}
+
+	@Test
+	fun `missing traveler and trip return not found`() {
+		val travelerId = UUID.randomUUID()
+		val tripId = UUID.randomUUID()
+
+		mockMvc.get("/travelers/$travelerId")
+			.andExpect {
+				status { isNotFound() }
+				jsonPath("$.type") { value("TRAVELER_NOT_FOUND") }
+			}
+
+		mockMvc.get("/trips/$tripId?travelerId=$travelerId")
+			.andExpect {
+				status { isNotFound() }
+				jsonPath("$.type") { value("TRIP_NOT_FOUND") }
+			}
+	}
+
+	@Test
+	fun `invalid activity update and delete return not found`() {
+		val travelerId = createTraveler()
+		val tripId = UUID.randomUUID()
+		val dayId = UUID.randomUUID()
+		val activityId = UUID.randomUUID()
+		val missingActivityId = UUID.randomUUID()
+		createTrip(travelerId, tripId, dayId, activityId)
+
+		mockMvc.put("/trips/$tripId/days/$dayId/activities/$missingActivityId") {
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"id":"${UUID.randomUUID()}","dayId":"$dayId","timeBlock":"AFTERNOON","title":"Museum","description":"Indoor visit","durationMinutes":90,"isIndoor":true,"tags":["INDOOR"]}"""
+		}.andExpect {
+			status { isNotFound() }
+			jsonPath("$.type") { value("ACTIVITY_NOT_FOUND") }
+		}
+
+		mockMvc.delete("/trips/$tripId/days/$dayId/activities/$missingActivityId")
+			.andExpect {
+				status { isNotFound() }
+				jsonPath("$.type") { value("ACTIVITY_NOT_FOUND") }
+			}
+	}
+
+	@Test
+	fun `deleted trip is no longer readable`() {
+		val travelerId = createTraveler()
+		val tripId = UUID.randomUUID()
+		createTrip(travelerId, tripId, UUID.randomUUID(), UUID.randomUUID())
+
+		mockMvc.delete("/trips/$tripId?travelerId=$travelerId")
+			.andExpect { status { isNoContent() } }
+
+		mockMvc.get("/trips/$tripId?travelerId=$travelerId")
+			.andExpect {
+				status { isNotFound() }
+				jsonPath("$.type") { value("TRIP_NOT_FOUND") }
+			}
+	}
+
+	private fun createTraveler(): String {
+		val email = "traveler-${UUID.randomUUID()}@example.com"
+		val json = mockMvc.post("/travelers") {
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"email":"$email","passwordHash":"hash","isDemo":false}"""
+		}.andExpect { status { isCreated() } }.andReturn().response.contentAsString
+		return JsonPath.read(json, "$.id")
+	}
+
+	private fun createTrip(travelerId: String, tripId: UUID, dayId: UUID, activityId: UUID) {
+		mockMvc.post("/trips?travelerId=$travelerId") {
+			contentType = MediaType.APPLICATION_JSON
+			content = """
+				{
+				  "id":"$tripId",
+				  "destination":"Munich",
+				  "startDate":"2026-05-15",
+				  "endDate":"2026-05-15",
+				  "vibe":"Sporty",
+				  "schedule":{"days":[{"id":"$dayId","dayNumber":1,"date":"2026-05-15","activities":[{"id":"$activityId","dayId":"$dayId","timeBlock":"MORNING","title":"Run","description":"Park run","durationMinutes":60,"isIndoor":false,"tags":["SPORTY"]}]}]}
+				}
+			""".trimIndent()
+		}.andExpect { status { isCreated() } }
+	}
 }

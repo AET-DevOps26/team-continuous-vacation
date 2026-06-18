@@ -61,6 +61,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+coverage.xml
+
 # =========================
 # Environment Variables & Secrets
 # =========================

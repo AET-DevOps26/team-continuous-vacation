@@ -3,34 +3,31 @@ title TripTailor - Activity Update (Micro-Regeneration) Flow
 
 actor User
 participant Frontend
-participant "API Gateway\n(Spring Boot)" as APIGW
-participant "Itinerary Service" as ITIN
+participant "Backend API\n(Spring Boot)" as API
 participant "GenAI Service\n(Python)" as AI
-participant "Trip Service" as TRIP
+participant "Persistence Service\n(Spring Boot)" as PERSIST
 database DB
 
 User -> Frontend : Click "Edit" on activity block
 User -> Frontend : Enter update request\n("Make this indoor")
 
-Frontend -> APIGW : PATCH /trips/{tripId}/activities/{activityId}
-APIGW -> ITIN : Forward update request
+Frontend -> API : PATCH /trips/{tripId}/days/{dayId}/activities/{activityId}
 
-ITIN -> TRIP : Fetch current activity context
-TRIP -> DB : Query itinerary + activity
-DB --> TRIP : Return trip data
-TRIP --> ITIN : Activity context
+API -> PERSIST : GET /trips/{tripId}?travelerId={id}
+PERSIST -> DB : Query itinerary + activity
+DB --> PERSIST : Return trip data
+PERSIST --> API : Activity context
 
-ITIN -> AI : regenerate-activity(context, userPrompt)
+API -> AI : POST /activities/alternative
 AI -> AI : Call LLM with targeted context
-AI --> ITIN : Return updated activity JSON
+AI --> API : Return replacement activity JSON
 
-ITIN -> TRIP : Update single activity block
-TRIP -> DB : Update activity row
-DB --> TRIP : Activity updated
-TRIP --> ITIN : Updated itinerary
+API -> PERSIST : PUT /trips/{tripId}/days/{dayId}/activities/{activityId}
+PERSIST -> DB : Replace activity row
+DB --> PERSIST : Activity updated
+PERSIST --> API : Updated activity
 
-ITIN --> APIGW : Return updated activity
-APIGW --> Frontend : Refresh activity card
+API --> Frontend : Return updated activity
 
 Frontend --> User : Show updated activity\n("Visit Deutsches Museum")
 

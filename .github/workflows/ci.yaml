@@ -26,6 +26,14 @@ jobs:
         run: npm run lint
       - name: Run Tests
         run: npm run test
+      - name: Generate coverage report
+        run: npm run test:coverage
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: error
       - name: Build
         run: npm run build
 
@@ -46,6 +54,14 @@ jobs:
         run: chmod +x ./gradlew
       - name: Build and Test with Gradle
         run: ./gradlew build
+      - name: Generate coverage report
+        run: ./gradlew test jacocoTestReport
+      - name: Upload backend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/build/reports/jacoco/test/
+          if-no-files-found: error
 
   build-persistence-service:
     runs-on: ubuntu-latest
@@ -64,6 +80,14 @@ jobs:
         run: chmod +x ./gradlew
       - name: Build and Test with Gradle
         run: ./gradlew build
+      - name: Generate coverage report
+        run: ./gradlew test jacocoTestReport
+      - name: Upload persistence coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: persistence-service-coverage
+          path: persistence-service/build/reports/jacoco/test/
+          if-no-files-found: error
 
   build-genai:
     runs-on: ubuntu-latest
@@ -90,11 +114,23 @@ jobs:
           # Exit-zero treats all errors as warnings
           flake8 app --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Type check with mypy
+        continue-on-error: true
         run: |
-          mypy app --ignore-missing-imports || true
+          mypy app --ignore-missing-imports
       - name: Test with pytest
         run: |
-          pytest --verbose || echo "No tests found yet"
+          pytest --verbose
+      - name: Generate coverage report
+        run: |
+          pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
+      - name: Upload GenAI coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: genai-service-coverage
+          path: |
+            genai-service/coverage.xml
+            genai-service/htmlcov/
+          if-no-files-found: error
 
   build-travel-context:
     runs-on: ubuntu-latest
@@ -119,11 +155,23 @@ jobs:
           flake8 app --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 app --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Type check with mypy
+        continue-on-error: true
         run: |
-          mypy app --ignore-missing-imports || true
+          mypy app --ignore-missing-imports
       - name: Test with pytest
         run: |
           pytest --verbose
+      - name: Generate coverage report
+        run: |
+          pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
+      - name: Upload travel context coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: travel-context-service-coverage
+          path: |
+            travel-context-service/coverage.xml
+            travel-context-service/htmlcov/
+          if-no-files-found: error
 
   verify-docker-compose:
     needs: [build-frontend, build-backend, build-genai, build-persistence-service, build-travel-context]

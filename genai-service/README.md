@@ -5,6 +5,9 @@ AI-powered itinerary generation service for TripTailor.
 ## Features
 
 - Generate personalized travel itineraries using LLM
+- Suggest targeted replacement activities for micro-regeneration
+- Use travel context from `travel-context-service` for events and weather
+- Support Azure OpenAI and local OpenAI-compatible chat completion providers
 - RESTful API built with FastAPI (OpenAPI 3.0.3 compliant)
 - Docker support for easy deployment
 - Type-safe Pydantic models generated from OpenAPI specification
@@ -21,7 +24,11 @@ genai-service/
 │   ├── models/
 │   │   └── schemas.py            # OpenAPI spec-generated models
 │   ├── services/
-│   │   ├── schedule_service.py   # Core AI schedule logic
+│   │   ├── schedule_service.py   # Core AI schedule logic and response validation
+│   │   ├── travel_context_client.py
+│   │   ├── context_relevance.py
+│   │   ├── llm/                  # Azure and OpenAI-compatible providers
+│   │   └── prompts/              # Prompt builders
 │   └── main.py                   # FastAPI application
 ├── tests/
 │   └── test_api.py               # API endpoint tests
@@ -94,10 +101,15 @@ uvicorn app.main:app --reload --port 8000
 
 5. Run tests:
 ```bash
-pytest
+pytest --verbose
 ```
 
-6. Run linter:
+6. Run coverage:
+```bash
+pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
+```
+
+7. Run linter:
 ```bash
 flake8 app
 ```
@@ -123,12 +135,11 @@ All models are generated from the OpenAPI specification and located in `app/mode
 - **TimeBlock**: Enum (MORNING, NOON, AFTERNOON, EVENING, NIGHT)
 - **ActivityTag**: Enum (OUTDOOR, INDOOR, CULTURAL, SPORTY, etc.)
 
-## TODO
+## LLM Providers
 
-- [ ] Implement LLM integration (OpenAI, Anthropic, etc.)
-- [ ] Add proper error handling and logging
-- [ ] Implement caching mechanism
-- [ ] Add rate limiting
-- [ ] Add authentication/authorization
-- [ ] Implement prompt engineering for better results
-- [ ] Add metrics and monitoring
+Provider selection is controlled by environment settings in `app/config/settings.py`:
+
+- `LLM_PROVIDER=azure`: uses Azure OpenAI with `AZURE_LLM_API_KEY`, `AZURE_LLM_BASE_URL`, `AZURE_LLM_API_VERSION`, and `MODEL_NAME` as the deployment name.
+- `LLM_PROVIDER=local`: uses an OpenAI-compatible `/chat/completions` endpoint with `LOCAL_LLM_BASE_URL`, `LOCAL_LLM_API_KEY`, and `MODEL_NAME`.
+
+The service requests JSON mode when available, validates model output against Pydantic models, enforces schedule invariants, rejects duplicate replacement activities, and returns `502` when generated output does not match the itinerary contract.
