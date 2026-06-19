@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api.routes import schedules
 from app.config.settings import settings
@@ -28,6 +29,10 @@ app.add_middleware(
 
 # Include routers
 app.include_router(schedules.router)
+
+# Expose request count, latency, error-rate (and the custom GenAI metrics
+# registered in app.observability.metrics) at GET /metrics.
+Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health")
