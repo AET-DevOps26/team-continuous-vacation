@@ -6,8 +6,10 @@ from pydantic import BaseModel, Field
 
 from app.config.settings import settings
 from app.models.schemas import GenerationPreferences
+from app.observability import get_tracer
 
 logger = logging.getLogger(__name__)
+tracer = get_tracer(__name__)
 
 
 class Coordinates(BaseModel):
@@ -105,10 +107,16 @@ class TravelContextClient:
             "includeEvents": include_events,
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(f"{self.base_url}/trip-context", json=payload)
-                response.raise_for_status()
-                return TravelContext.model_validate(response.json())
+            with tracer.start_as_current_span("genai.travel_context_request") as span:
+                span.set_attribute("trip.destination", preferences.destination)
+                span.set_attribute("trip.include_events", include_events)
+                span.set_attribute("peer.service", "travel-context-service")
+                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                    response = await client.post(
+                        f"{self.base_url}/trip-context", json=payload
+                    )
+                    response.raise_for_status()
+                    return TravelContext.model_validate(response.json())
         except Exception as error:
             logger.warning(
                 "Travel context lookup failed destination=%s error=%s",

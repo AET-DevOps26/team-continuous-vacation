@@ -28,10 +28,12 @@ from app.services.prompts.schedule_prompts import (
     get_alternative_activity_prompt,
     get_schedule_generation_prompt,
 )
+from app.observability import get_tracer
 from app.services.context_relevance import ContextRelevanceClassifier
 from app.services.travel_context_client import TravelContextClient
 
 logger = logging.getLogger(__name__)
+tracer = get_tracer(__name__)
 
 SYSTEM_PROMPT = (
     "You generate travel itinerary data for an internal API. "
@@ -54,7 +56,9 @@ class ScheduleService:
     ):
         self.llm_provider = llm_provider or LLMProviderFactory.get_provider()
         self.travel_context_client = travel_context_client or TravelContextClient()
-        self.context_relevance_classifier = context_relevance_classifier or ContextRelevanceClassifier()
+        self.context_relevance_classifier = (
+            context_relevance_classifier or ContextRelevanceClassifier()
+        )
         self.model_name = settings.MODEL_NAME
         self.temperature = settings.TEMPERATURE
         self.max_tokens = settings.MAX_TOKENS
@@ -69,10 +73,19 @@ class ScheduleService:
         Returns:
             Schedule with all days and activities
         """
-        context_decision = await self.context_relevance_classifier.should_fetch_events_context(
-            preferences,
-            self.llm_provider,
-        )
+        with tracer.start_as_current_span("genai.context_relevance") as span:
+            span.set_attribute("trip.destination", preferences.destination)
+            span.set_attribute("trip.vibe", preferences.vibe)
+            context_decision = (
+                await self.context_relevance_classifier.should_fetch_events_context(
+                    preferences,
+                    self.llm_provider,
+                )
+            )
+            span.set_attribute(
+                "trip.include_events",
+                context_decision.should_fetch_events_context,
+            )
         logger.info(
             "Context relevance decision destination=%s should_fetch_events_context=%s source=%s reason=%s",
             preferences.destination,
@@ -83,10 +96,16 @@ class ScheduleService:
         # Weather is useful for every trip (even pure beach trips), so we always
         # fetch the travel context for it. Paid event lookups stay gated behind
         # the relevance decision via the includeEvents flag.
-        travel_context = await self.travel_context_client.get_trip_context(
-            preferences,
-            include_events=context_decision.should_fetch_events_context,
-        )
+        with tracer.start_as_current_span("genai.fetch_travel_context") as span:
+            span.set_attribute("trip.destination", preferences.destination)
+            span.set_attribute(
+                "trip.include_events",
+                context_decision.should_fetch_events_context,
+            )
+            travel_context = await self.travel_context_client.get_trip_context(
+                preferences,
+                include_events=context_decision.should_fetch_events_context,
+            )
         prompt = get_schedule_generation_prompt(preferences, travel_context)
         logger.debug(
             "Starting schedule LLM generation destination=%s startDate=%s endDate=%s "
@@ -204,10 +223,14 @@ class ScheduleService:
             options.json_mode,
             options.system_prompt,
         )
-        return await self.llm_provider.generate(
-            prompt=prompt,
-            options=options,
-        )
+        with tracer.start_as_current_span("genai.call_llm") as span:
+            span.set_attribute("llm.provider", self.llm_provider.__class__.__name__)
+            span.set_attribute("llm.model", self.model_name)
+            span.set_attribute("llm.prompt_length", len(prompt))
+            return await self.llm_provider.generate(
+                prompt=prompt,
+                options=options,
+            )
 
     def _load_json(self, response_text: str, generation_name: str) -> dict:
         cleaned = response_text.strip()
@@ -366,9 +389,7 @@ class ScheduleService:
             ],
         )
 
-    def _to_activity(
-        self, activity_data: GeneratedActivity, day_id: UUID
-    ) -> Activity:
+    def _to_activity(self, activity_data: GeneratedActivity, day_id: UUID) -> Activity:
         return Activity(
             id=uuid4(),
             dayId=day_id,

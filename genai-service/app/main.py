@@ -5,10 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import schedules
 from app.config.settings import settings
+from app.observability import configure_observability
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
-    format="%(levelname)s:%(name)s:%(message)s",
+    format="%(levelname)s:%(name)s:trace_id=%(otelTraceID)s span_id=%(otelSpanID)s:%(message)s",
 )
 
 app = FastAPI(
@@ -16,6 +17,8 @@ app = FastAPI(
     description="Internal AI generation engine. Consumed only by the App API. Not exposed to the frontend.",
     version="1.0.0",
 )
+
+configure_observability(app, "genai-service")
 
 # CORS middleware
 app.add_middleware(

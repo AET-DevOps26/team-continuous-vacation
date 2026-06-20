@@ -18,8 +18,10 @@ from app.services.providers.overpass_provider import OverpassProvider
 from app.services.providers.photon_provider import PhotonProvider
 from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
 from app.services.ranking import PlaceRanker
+from app.observability import get_tracer
 
 logger = logging.getLogger(__name__)
+tracer = get_tracer(__name__)
 
 COUNTRY_CODE_FALLBACK = "us"
 GERMANY_ALIASES = {"de", "deu", "germany", "deutschland"}
@@ -37,10 +39,18 @@ class TravelContextService:
         events_cache: TtlCache[list[EventCandidate]] | None = None,
         weather_cache: TtlCache[list[WeatherDaily]] | None = None,
     ):
-        self.geocoder = geocoder or NominatimProvider(settings.NOMINATIM_BASE_URL, settings.HTTP_USER_AGENT)
-        self.fallback_geocoder = fallback_geocoder or PhotonProvider(settings.PHOTON_BASE_URL, settings.HTTP_USER_AGENT)
-        self.place_provider = place_provider or OverpassProvider(settings.OVERPASS_BASE_URL, settings.HTTP_USER_AGENT)
-        self.events_provider = events_provider or SerpApiEventsProvider(settings.SERPAPI_BASE_URL, settings.SERPAPI_API_KEY)
+        self.geocoder = geocoder or NominatimProvider(
+            settings.NOMINATIM_BASE_URL, settings.HTTP_USER_AGENT
+        )
+        self.fallback_geocoder = fallback_geocoder or PhotonProvider(
+            settings.PHOTON_BASE_URL, settings.HTTP_USER_AGENT
+        )
+        self.place_provider = place_provider or OverpassProvider(
+            settings.OVERPASS_BASE_URL, settings.HTTP_USER_AGENT
+        )
+        self.events_provider = events_provider or SerpApiEventsProvider(
+            settings.SERPAPI_BASE_URL, settings.SERPAPI_API_KEY
+        )
         self.weather_provider = weather_provider or OpenMeteoWeatherProvider(
             settings.OPEN_METEO_FORECAST_BASE_URL,
             settings.OPEN_METEO_ARCHIVE_BASE_URL,
@@ -51,22 +61,32 @@ class TravelContextService:
         self.weather_cache = weather_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.ranker = PlaceRanker()
 
-    async def build_trip_context(self, request: TripContextRequest) -> TripContextResponse:
-        logger.info(
-            "Building travel context destination=%s startDate=%s endDate=%s vibe=%s includeEvents=%s",
-            request.destination,
-            request.startDate,
-            request.endDate,
-            request.vibe,
-            request.includeEvents,
-        )
-        location = await self._geocode(request.destination)
-        events = (
-            await self._search_events(location, request.startDate, request.endDate)
-            if request.includeEvents
-            else []
-        )
-        weather = await self._get_weather(location, request.startDate, request.endDate)
+    async def build_trip_context(
+        self, request: TripContextRequest
+    ) -> TripContextResponse:
+        with tracer.start_as_current_span("travel_context.build") as span:
+            span.set_attribute("trip.destination", request.destination)
+            span.set_attribute("trip.vibe", request.vibe)
+            span.set_attribute("trip.include_events", request.includeEvents)
+            logger.info(
+                "Building travel context destination=%s startDate=%s endDate=%s vibe=%s includeEvents=%s",
+                request.destination,
+                request.startDate,
+                request.endDate,
+                request.vibe,
+                request.includeEvents,
+            )
+            location = await self._geocode(request.destination)
+            events = (
+                await self._search_events(location, request.startDate, request.endDate)
+                if request.includeEvents
+                else []
+            )
+            weather = await self._get_weather(
+                location, request.startDate, request.endDate
+            )
+            span.set_attribute("travel_context.events_count", len(events))
+            span.set_attribute("travel_context.weather_days", len(weather))
         logger.info(
             "Built travel context destination=%s validated_location=%s events=%s weather_days=%s",
             request.destination,
@@ -97,6 +117,11 @@ class TravelContextService:
         )
 
     async def _geocode(self, destination: str) -> GeocodedLocation:
+        with tracer.start_as_current_span("travel_context.geocode") as span:
+            span.set_attribute("trip.destination", destination)
+            return await self._geocode_observed(destination)
+
+    async def _geocode_observed(self, destination: str) -> GeocodedLocation:
         cache_key = f"geocode:{destination.strip().lower()}"
         cached = self.geocode_cache.get(cache_key)
         if cached:
@@ -110,7 +135,9 @@ class TravelContextService:
             )
             return cached
         try:
-            logger.info("Geocoding destination with Nominatim destination=%s", destination)
+            logger.info(
+                "Geocoding destination with Nominatim destination=%s", destination
+            )
             location = await self.geocoder.geocode(destination)
         except Exception as error:
             logger.warning(
@@ -137,10 +164,22 @@ class TravelContextService:
         start_date: date,
         end_date: date,
     ) -> list[EventCandidate]:
+        with tracer.start_as_current_span("travel_context.search_events") as span:
+            span.set_attribute("travel_context.location", location.name)
+            return await self._search_events_observed(location, start_date, end_date)
+
+    async def _search_events_observed(
+        self,
+        location: GeocodedLocation,
+        start_date: date,
+        end_date: date,
+    ) -> list[EventCandidate]:
         location_name = location.name.strip() or location.displayName or ""
         country_code = _google_country_code(location.countryCode)
         date_filter = _date_filter(start_date, end_date)
-        cache_key = f"events:{location_name.lower()}:{country_code}:{date_filter or 'any'}"
+        cache_key = (
+            f"events:{location_name.lower()}:{country_code}:{date_filter or 'any'}"
+        )
         cached = self.events_cache.get(cache_key)
         if cached is not None:
             logger.info(
@@ -167,6 +206,16 @@ class TravelContextService:
         return limited_events
 
     async def _get_weather(
+        self,
+        location: GeocodedLocation,
+        start_date: date,
+        end_date: date,
+    ) -> list[WeatherDaily]:
+        with tracer.start_as_current_span("travel_context.weather") as span:
+            span.set_attribute("travel_context.location", location.name)
+            return await self._get_weather_observed(location, start_date, end_date)
+
+    async def _get_weather_observed(
         self,
         location: GeocodedLocation,
         start_date: date,
@@ -244,7 +293,9 @@ def _date_filter(start_date: date, end_date: date) -> str | None:
     if start_date <= today <= end_date and (end_date - today).days <= 31:
         return "date:month"
     first_day_next_month = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
-    last_day_next_month = (first_day_next_month + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    last_day_next_month = (first_day_next_month + timedelta(days=32)).replace(
+        day=1
+    ) - timedelta(days=1)
     if start_date >= first_day_next_month and end_date <= last_day_next_month:
         return "date:next_month"
     return None
