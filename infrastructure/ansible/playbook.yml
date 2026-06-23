@@ -43,10 +43,8 @@
     - name: Enable swapfile
       command: "swapon {{ swap_file }}"
       register: swapon_result
+      when: swap_file not in active_swap.stdout
       changed_when: swapon_result.rc == 0
-      failed_when:
-        - swapon_result.rc != 0
-        - "'already' not in swapon_result.stderr"
 
     - name: Persist swapfile in fstab
       mount:
