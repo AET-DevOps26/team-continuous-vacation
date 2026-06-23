@@ -26,13 +26,19 @@
         group: root
         mode: "0600"
 
+    # mkswap refuses to run against a swapfile that is already mounted/active
+    # (a re-run of this playbook), so check the active swaps first and only
+    # format when this file is not yet in use.
+    - name: Check active swap devices
+      command: swapon --noheadings --show=NAME
+      register: active_swap
+      changed_when: false
+
     - name: Format swapfile
       command: "mkswap {{ swap_file }}"
       register: mkswap_result
+      when: swap_file not in active_swap.stdout
       changed_when: "'Setting up swapspace' in mkswap_result.stdout"
-      failed_when:
-        - mkswap_result.rc != 0
-        - "'already' not in mkswap_result.stderr"
 
     - name: Enable swapfile
       command: "swapon {{ swap_file }}"
