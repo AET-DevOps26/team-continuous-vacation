@@ -1,0 +1,54 @@
+# Alert rules. Thresholds are intentionally aggressive: this is a university
+# project with no real customer, so we want alerts to fire fast during demos.
+groups:
+  - name: triptailor-availability
+    rules:
+      # Any scrape target unreachable for 10s -> service is down.
+      - alert: ServiceDown
+        expr: up == 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Prometheus target {{ $labels.job }} ({{ $labels.instance }}) has been unreachable for 10s."
+
+  - name: triptailor-errors
+    rules:
+      # Fire on the first server error from a Spring Boot service.
+      - alert: RequestFailing
+        expr: increase(http_server_requests_seconds_count{outcome="SERVER_ERROR"}[1m]) > 0
+        for: 0s
+        labels:
+          severity: warning
+          stack: spring
+        annotations:
+          summary: "Failing requests on {{ $labels.job }}"
+          description: "{{ $labels.job }} returned 5xx on {{ $labels.uri }} within the last minute."
+
+      # Fire on the first server error from a FastAPI service.
+      - alert: RequestFailing
+        expr: increase(http_requests_total{status=~"5.."}[1m]) > 0
+        for: 0s
+        labels:
+          severity: warning
+          stack: fastapi
+        annotations:
+          summary: "Failing requests on {{ $labels.job }}"
+          description: "{{ $labels.job }} returned 5xx on {{ $labels.handler }} within the last minute."
+
+  - name: triptailor-latency
+    rules:
+      # p95 request latency above 1s for 30s (Spring Boot).
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (job, le) (rate(http_server_requests_seconds_bucket[1m]))
+          ) > 1
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency on {{ $labels.job }}"
+          description: "p95 request latency on {{ $labels.job }} has exceeded 1s for 30s."

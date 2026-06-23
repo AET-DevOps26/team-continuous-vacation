@@ -112,6 +112,21 @@ services:
     depends_on:
       - backend
 
+  prometheus:
+    image: prom/prometheus:v3.11.0
+    container_name: triptailor-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+      - persistence-service
+      - genai-service
+      - travel-context-service
+
 volumes:
   pgdata:
     driver: local

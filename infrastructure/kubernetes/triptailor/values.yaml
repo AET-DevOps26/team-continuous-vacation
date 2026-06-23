@@ -118,6 +118,14 @@ frontend:
   replicaCount: 1
   resources: {}
 
+monitoring:
+  enabled: true
+  prometheus:
+    image:
+      repository: prom/prometheus
+      tag: v3.11.0
+    resources: {}
+
 ingress:
   enabled: false
   className: ""

@@ -30,6 +30,10 @@ from app.services.prompts.schedule_prompts import (
 )
 from app.services.context_relevance import ContextRelevanceClassifier
 from app.services.travel_context_client import TravelContextClient
+from app.observability.metrics import (
+    GENERATIONS_TOTAL,
+    LLM_REQUEST_DURATION_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +124,7 @@ class ScheduleService:
                 len(days),
                 sum(len(day.activities) for day in days),
             )
+            GENERATIONS_TOTAL.labels(kind="schedule", outcome="success").inc()
             return Schedule(days=days)
         except (json.JSONDecodeError, KeyError, ValueError, ValidationError) as error:
             logger.warning(
@@ -127,6 +132,7 @@ class ScheduleService:
                 error,
                 response_text,
             )
+            GENERATIONS_TOTAL.labels(kind="schedule", outcome="error").inc()
             raise ScheduleGenerationError(
                 "Generated schedule did not match the expected format"
             ) from error
@@ -173,6 +179,7 @@ class ScheduleService:
                 activity.id,
                 activity.title,
             )
+            GENERATIONS_TOTAL.labels(kind="alternative", outcome="success").inc()
             return activity
         except (json.JSONDecodeError, KeyError, ValueError, ValidationError) as error:
             logger.warning(
@@ -180,6 +187,7 @@ class ScheduleService:
                 error,
                 response_text,
             )
+            GENERATIONS_TOTAL.labels(kind="alternative", outcome="error").inc()
             raise ScheduleGenerationError(
                 "Generated activity did not match the expected format"
             ) from error
@@ -204,10 +212,11 @@ class ScheduleService:
             options.json_mode,
             options.system_prompt,
         )
-        return await self.llm_provider.generate(
-            prompt=prompt,
-            options=options,
-        )
+        with LLM_REQUEST_DURATION_SECONDS.time():
+            return await self.llm_provider.generate(
+                prompt=prompt,
+                options=options,
+            )
 
     def _load_json(self, response_text: str, generation_name: str) -> dict:
         cleaned = response_text.strip()
