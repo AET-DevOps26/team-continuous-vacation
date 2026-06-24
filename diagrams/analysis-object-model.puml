@@ -24,24 +24,39 @@ class Activity {
   + regenerate()
 }
 
-class User {
-  preferences
+class Traveler {
+  email
+  isDemo
   + createTrip()
   + editActivity()
 }
 
-class GenAIService {
-  + generateItinerary()
+class BackendAPI {
+  + register()
+  + login()
+  + createTrip()
   + regenerateActivity()
+}
+
+class GenAIService {
+  + generateSchedule()
+  + suggestAlternative()
+}
+
+class PersistenceService {
+  + saveTrip()
+  + getTrip()
+  + updateActivity()
 }
 
 Trip "1" -- "*" Day
 Day "1" -- "*" Activity
 
-User ..> Trip : creates/views
-User ..> Activity : edits/regenerates
+Traveler ..> Trip : creates/views
+Traveler ..> Activity : edits/regenerates
 
-Trip ..> GenAIService : uses
-Activity ..> GenAIService : uses
+BackendAPI ..> GenAIService : uses
+BackendAPI ..> PersistenceService : uses
+PersistenceService ..> Trip : stores
 
 @enduml
