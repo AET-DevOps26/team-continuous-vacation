@@ -101,12 +101,12 @@ uvicorn app.main:app --reload --port 8000
 
 5. Run tests:
 ```bash
-pytest --verbose
+python -m pytest --verbose
 ```
 
 6. Run coverage:
 ```bash
-pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
+python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
 ```
 
 7. Run linter:

@@ -15,8 +15,8 @@ FastAPI enrichment service that supplies real-world context to itinerary generat
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8090
-pytest --verbose
-pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
+python -m pytest --verbose
+python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
 ```
 
 Coverage HTML is written to `htmlcov/index.html`; XML is written to `coverage.xml` for CI artifacts.

@@ -74,8 +74,8 @@ class OpenAIProvider(LLMProvider):
 
     def _build_payload(
         self, prompt: str, options: LLMGenerationOptions
-    ) -> dict:
-        payload = {
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": [
                 {"role": "system", "content": options.system_prompt},
@@ -88,7 +88,7 @@ class OpenAIProvider(LLMProvider):
         return payload
 
     def _add_generation_controls(
-        self, payload: dict, options: LLMGenerationOptions
+        self, payload: dict[str, Any], options: LLMGenerationOptions
     ) -> None:
         if _uses_completion_token_limit(self.model_name):
             payload["max_completion_tokens"] = options.max_tokens
@@ -125,7 +125,7 @@ class AzureOpenAIProvider(OpenAIProvider):
         """
         Generate a response from Azure OpenAI chat completions.
         """
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": [
                 {"role": "system", "content": options.system_prompt},
@@ -147,8 +147,7 @@ class AzureOpenAIProvider(OpenAIProvider):
             _generation_controls(payload),
         )
         response = await asyncio.to_thread(
-            self.client.chat.completions.create,
-            **payload,
+            lambda: self.client.chat.completions.create(**payload)
         )
         choice = response.choices[0]
         content = choice.message.content
@@ -178,7 +177,7 @@ def _uses_completion_token_limit(model_name: str) -> bool:
     )
 
 
-def _generation_controls(payload: dict) -> dict:
+def _generation_controls(payload: dict[str, Any]) -> dict[str, Any]:
     control_keys = (
         "model",
         "temperature",
@@ -190,7 +189,7 @@ def _generation_controls(payload: dict) -> dict:
     return {key: payload[key] for key in control_keys if key in payload}
 
 
-def _summarize_messages(messages: list[dict]) -> list[dict]:
+def _summarize_messages(messages: list[dict[str, str]]) -> list[dict[str, Any]]:
     return [
         {
             "role": message.get("role"),

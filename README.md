@@ -60,8 +60,8 @@ Run commands from the module directory unless noted.
 | Frontend | `npm run lint && npm run test && npm run build` | `npm run test:coverage` |
 | Backend API | `./gradlew build` | `./gradlew test jacocoTestReport` |
 | Persistence Service | `./gradlew build` | `./gradlew test jacocoTestReport` |
-| GenAI Service | `pytest --verbose` | `pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
-| Travel Context Service | `pytest --verbose` | `pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
+| GenAI Service | `python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
+| Travel Context Service | `python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
 | Full local stack | `docker compose up --build` | Not applicable; use module coverage commands. |
 
 Python services expect dependencies from `requirements.txt` and `requirements-dev.txt` to be installed in the active virtual environment.
