@@ -70,6 +70,12 @@ spec:
                 secretKeyRef:
                   name: {{ include "triptailor.fullname" . }}-secret
                   key: JWT_SECRET
+            {{- if .Values.tracing.enabled }}
+            - name: TRACING_OTLP_ENDPOINT
+              value: {{ .Values.tracing.otlpEndpoint | quote }}
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: {{ .Values.tracing.samplingProbability | quote }}
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /actuator/health

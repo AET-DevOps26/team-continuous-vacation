@@ -5,6 +5,11 @@ global:
 nameOverride: ""
 fullnameOverride: ""
 
+tracing:
+  enabled: false
+  otlpEndpoint: http://tempo:4318/v1/traces
+  samplingProbability: "1.0"
+
 postgres:
   enabled: true
   image:

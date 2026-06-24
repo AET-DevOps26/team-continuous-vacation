@@ -6,10 +6,11 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api.routes import context
 from app.config.settings import settings
+from app.observability import configure_observability
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
-    format="%(levelname)s:%(name)s:%(message)s",
+    format="%(levelname)s:%(name)s:trace_id=%(otelTraceID)s span_id=%(otelSpanID)s:%(message)s",
 )
 
 app = FastAPI(
@@ -17,6 +18,8 @@ app = FastAPI(
     description="Internal enrichment service for real-world places, events, weather, and routing context.",
     version="1.0.0",
 )
+
+configure_observability(app, "travel-context-service")
 
 app.add_middleware(
     CORSMiddleware,
