@@ -3,23 +3,20 @@ title TripTailor - Itinerary Creation Flow
 
 actor User
 participant Frontend
-participant "API Gateway\n(Spring Boot)" as APIGW
-participant "Itinerary Service" as ITIN
+participant "Backend API\n(Spring Boot)" as API
 participant "GenAI Service\n(Python)" as AI
-participant "Trip Service" as TRIP
+participant "Persistence Service\n(Spring Boot)" as PERSIST
 database DB
 
 User -> Frontend : Enter trip details
-Frontend -> APIGW : POST /trips
-APIGW -> ITIN : Forward request
-ITIN -> AI : generate-itinerary()
+Frontend -> API : POST /trips
+API -> AI : POST /schedules
 AI -> AI : Call LLM
-AI --> ITIN : Return JSON itinerary
-ITIN -> TRIP : Save trip
-TRIP -> DB : Insert data
-DB --> TRIP : Saved to DB
-TRIP --> ITIN : Saved trip
-ITIN --> APIGW : Response
-APIGW --> Frontend : Return itinerary
+AI --> API : Return validated schedule
+API -> PERSIST : POST /trips?travelerId={id}
+PERSIST -> DB : Insert trip, days, activities
+DB --> PERSIST : Saved to DB
+PERSIST --> API : Saved trip
+API --> Frontend : Return itinerary
 
 @enduml

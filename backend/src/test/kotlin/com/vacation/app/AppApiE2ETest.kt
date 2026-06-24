@@ -23,6 +23,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.test.context.junit.jupiter.SpringExtension
 import org.springframework.test.web.servlet.MockMvc
@@ -30,6 +31,7 @@ import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
+import org.springframework.web.reactive.function.client.WebClientResponseException
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -124,6 +126,121 @@ class AppApiE2ETest {
 			}
 	}
 
+	@Test
+	fun `invalid bearer token is rejected`() {
+		mockMvc.get("/trips") {
+			header("Authorization", "Bearer not-a-jwt")
+		}.andExpect {
+			status { isUnauthorized() }
+		}
+	}
+
+	@Test
+	fun `registered traveler can login and invalid credentials are rejected`() {
+		val email = "ada-${UUID.randomUUID()}@example.com"
+		mockMvc.post("/auth/register") {
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"email":"$email","password":"password123"}"""
+		}.andExpect {
+			status { isCreated() }
+			jsonPath("$.accessToken") { exists() }
+			jsonPath("$.isDemo") { value(false) }
+		}
+
+		mockMvc.post("/auth/login") {
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"email":"$email","password":"password123"}"""
+		}.andExpect {
+			status { isOk() }
+			jsonPath("$.accessToken") { exists() }
+		}
+
+		mockMvc.post("/auth/login") {
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"email":"$email","password":"wrong-password"}"""
+		}.andExpect {
+			status { isUnauthorized() }
+			jsonPath("$.type") { value("INVALID_CREDENTIALS") }
+		}
+	}
+
+	@Test
+	fun `duplicate registration maps to conflict`() {
+		val email = "duplicate-${UUID.randomUUID()}@example.com"
+		repeat(2) { attempt ->
+			mockMvc.post("/auth/register") {
+				contentType = MediaType.APPLICATION_JSON
+				content = """{"email":"$email","password":"password123"}"""
+			}.andExpect {
+				if (attempt == 0) {
+					status { isCreated() }
+				} else {
+					status { isConflict() }
+					jsonPath("$.type") { value("EMAIL_ALREADY_REGISTERED") }
+				}
+			}
+		}
+	}
+
+	@Test
+	fun `traveler cannot access another travelers trip`() {
+		val firstToken = JsonPath.read<String>(
+			mockMvc.post("/auth/demo").andExpect { status { isCreated() } }.andReturn().response.contentAsString,
+			"$.accessToken",
+		)
+		val secondToken = JsonPath.read<String>(
+			mockMvc.post("/auth/demo").andExpect { status { isCreated() } }.andReturn().response.contentAsString,
+			"$.accessToken",
+		)
+		val tripJson = mockMvc.post("/trips") {
+			header("Authorization", "Bearer $firstToken")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"destination":"Vienna","startDate":"2026-07-01","endDate":"2026-07-01","vibe":"Historic"}"""
+		}.andExpect { status { isCreated() } }.andReturn().response.contentAsString
+		val tripId = JsonPath.read<String>(tripJson, "$.id")
+
+		mockMvc.get("/trips/$tripId") {
+			header("Authorization", "Bearer $secondToken")
+		}.andExpect {
+			status { isNotFound() }
+			jsonPath("$.type") { value("NOT_FOUND") }
+		}
+	}
+
+	@Test
+	fun `invalid dates are rejected before GenAI call`() {
+		val token = JsonPath.read<String>(
+			mockMvc.post("/auth/demo").andExpect { status { isCreated() } }.andReturn().response.contentAsString,
+			"$.accessToken",
+		)
+
+		mockMvc.post("/trips") {
+			header("Authorization", "Bearer $token")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"destination":"Munich","startDate":"2026-08-03","endDate":"2026-08-01","vibe":"Sporty"}"""
+		}.andExpect {
+			status { isBadRequest() }
+			jsonPath("$.type") { value("INVALID_DATES") }
+		}
+	}
+
+	@Test
+	fun `GenAI upstream failure maps to upstream error`() {
+		val token = JsonPath.read<String>(
+			mockMvc.post("/auth/demo").andExpect { status { isCreated() } }.andReturn().response.contentAsString,
+			"$.accessToken",
+		)
+
+		mockMvc.post("/trips") {
+			header("Authorization", "Bearer $token")
+			contentType = MediaType.APPLICATION_JSON
+			content = """{"destination":"GenAI down","startDate":"2026-09-01","endDate":"2026-09-01","vibe":"Sporty"}"""
+		}.andExpect {
+			status { isBadGateway() }
+			jsonPath("$.type") { value("UPSTREAM_ERROR") }
+		}
+	}
+
 	@TestConfiguration
 	class FakePersistenceConfiguration {
 		@Bean
@@ -138,6 +255,9 @@ class AppApiE2ETest {
 
 private class FakeGenAiClient : GenAiClient {
 	override fun generateSchedule(preferences: GenerationPreferences): Schedule {
+		if (preferences.destination == "GenAI down") {
+			throw WebClientResponseException.BadGateway.create(502, "Bad Gateway", HttpHeaders.EMPTY, ByteArray(0), null)
+		}
 		val days = generateSequence(preferences.startDate) { it.plusDays(1) }
 			.takeWhile { !it.isAfter(preferences.endDate) }
 			.mapIndexed { index, date ->
@@ -188,6 +308,9 @@ private class InMemoryPersistenceClient : PersistenceClient {
 	private val trips = ConcurrentHashMap<UUID, MutableMap<UUID, Trip>>()
 
 	override fun createTraveler(request: TravelerCreateRequest): Traveler {
+		if (!request.email.isNullOrBlank() && authRecords.containsKey(request.email)) {
+			throw WebClientResponseException.Conflict.create(409, "Conflict", HttpHeaders.EMPTY, ByteArray(0), null)
+		}
 		val traveler = Traveler(UUID.randomUUID(), request.email, request.isDemo, Instant.now())
 		travelers[traveler.id] = traveler
 		if (!request.email.isNullOrBlank() && !request.passwordHash.isNullOrBlank()) {
@@ -197,20 +320,26 @@ private class InMemoryPersistenceClient : PersistenceClient {
 		return traveler
 	}
 
-	override fun findTravelerAuthRecordByEmail(email: String): TravelerAuthRecord = authRecords.getValue(email)
+	override fun findTravelerAuthRecordByEmail(email: String): TravelerAuthRecord =
+		authRecords[email] ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
 
 	override fun listTrips(travelerId: UUID): List<TripSummary> =
 		trips[travelerId].orEmpty().values.map { TripSummary(it.id, it.destination, it.startDate, it.endDate) }
 
 	override fun saveTrip(travelerId: UUID, trip: Trip): Trip {
-		trips.getValue(travelerId)[trip.id] = trip
+		val travelerTrips = trips[travelerId] ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
+		travelerTrips[trip.id] = trip
 		return trip
 	}
 
-	override fun getTrip(travelerId: UUID, tripId: UUID): Trip = trips.getValue(travelerId).getValue(tripId)
+	override fun getTrip(travelerId: UUID, tripId: UUID): Trip =
+		trips[travelerId]?.get(tripId) ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
 
 	override fun deleteTrip(travelerId: UUID, tripId: UUID) {
-		trips.getValue(travelerId).remove(tripId)
+		val travelerTrips = trips[travelerId] ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
+		if (travelerTrips.remove(tripId) == null) {
+			throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
+		}
 	}
 
 	override fun updateActivity(tripId: UUID, dayId: UUID, activityId: UUID, activity: Activity): Activity {

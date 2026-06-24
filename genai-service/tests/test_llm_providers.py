@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 
 import pytest
+import httpx
 
 from app.services.llm.base import LLMGenerationOptions
-from app.services.llm.openai_provider import AzureOpenAIProvider
+from app.services.llm.factory import LLMProviderFactory
+from app.services.llm.openai_provider import AzureOpenAIProvider, OpenAIProvider
 
 
 class FakeChatCompletions:
@@ -124,3 +126,84 @@ async def test_azure_provider_rejects_empty_content_with_metadata():
 
     assert "did not include message content" in str(exc_info.value)
     assert "finish_reason=length" in str(exc_info.value)
+
+
+def test_factory_creates_local_openai_compatible_provider(monkeypatch):
+    monkeypatch.setattr("app.services.llm.factory.settings.LLM_PROVIDER", "local")
+    monkeypatch.setattr("app.services.llm.factory.settings.LOCAL_LLM_API_KEY", "local-key")
+    monkeypatch.setattr("app.services.llm.factory.settings.LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setattr("app.services.llm.factory.settings.MODEL_NAME", "llama3")
+
+    provider = LLMProviderFactory.get_provider()
+
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.api_key == "local-key"
+    assert provider.base_url == "http://localhost:11434/v1"
+    assert provider.model_name == "llama3"
+
+
+def test_factory_rejects_unsupported_provider(monkeypatch):
+    monkeypatch.setattr("app.services.llm.factory.settings.LLM_PROVIDER", "anthropic")
+
+    with pytest.raises(ValueError, match="Unsupported LLM provider"):
+        LLMProviderFactory.get_provider()
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_provider_raises_on_http_error(monkeypatch):
+    class FailingAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers=None, json=None, timeout=None):
+            return httpx.Response(
+                500,
+                text="model unavailable",
+                request=httpx.Request("POST", url),
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", FailingAsyncClient)
+    provider = OpenAIProvider("test-key", "http://local-llm.example/v1", "llama3")
+
+    with pytest.raises(Exception) as exc_info:
+        await provider.generate(
+            "Generate a trip",
+            LLMGenerationOptions(
+                temperature=0.7,
+                max_tokens=1000,
+                system_prompt="Return JSON",
+                json_mode=True,
+            ),
+        )
+
+    assert "OpenAI API error: 500" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_provider_propagates_timeout(monkeypatch):
+    class TimingOutAsyncClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers=None, json=None, timeout=None):
+            raise httpx.TimeoutException("request timed out")
+
+    monkeypatch.setattr(httpx, "AsyncClient", TimingOutAsyncClient)
+    provider = OpenAIProvider("test-key", "http://local-llm.example/v1", "llama3")
+
+    with pytest.raises(httpx.TimeoutException, match="request timed out"):
+        await provider.generate(
+            "Generate a trip",
+            LLMGenerationOptions(
+                temperature=0.7,
+                max_tokens=1000,
+                system_prompt="Return JSON",
+                json_mode=True,
+            ),
+        )

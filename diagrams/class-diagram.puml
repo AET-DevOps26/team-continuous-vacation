@@ -48,12 +48,14 @@ enum ActivityTag {
   PARTY
 }
 
-class User {
+class Traveler {
   +UUID id
-  +String name
+  +String email
+  +Boolean isDemo
+  +Instant createdAt
 }
 
-User "1" --> "*" Trip : owns
+Traveler "1" --> "*" Trip : owns
 Trip "1" --> "*" Day : contains
 Day "1" --> "*" Activity : contains
 

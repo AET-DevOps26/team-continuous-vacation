@@ -45,6 +45,22 @@ async def test_nominatim_response_maps_to_coordinates(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_nominatim_rate_limit_error_propagates(monkeypatch):
+    async def fake_get(self, url, params=None, headers=None):
+        return httpx.Response(
+            429,
+            text="too many requests",
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    provider = NominatimProvider("https://nominatim.example", "test-agent")
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await provider.geocode("Munich")
+
+
+@pytest.mark.asyncio
 async def test_overpass_maps_nodes_ways_and_relations(monkeypatch):
     async def fake_post(self, url, content=None, headers=None):
         return httpx.Response(
@@ -183,6 +199,34 @@ async def test_serpapi_events_returns_empty_when_api_key_missing():
     events = await provider.search_events("Munich", "de")
 
     assert events == []
+
+
+@pytest.mark.asyncio
+async def test_serpapi_events_error_payload_raises(monkeypatch):
+    async def fake_get(self, url, params=None):
+        return httpx.Response(
+            200,
+            json={"error": "rate limit exceeded"},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    provider = SerpApiEventsProvider("https://serpapi.example/search", "secret-key")
+
+    with pytest.raises(RuntimeError, match="rate limit exceeded"):
+        await provider.search_events("Munich", "de")
+
+
+@pytest.mark.asyncio
+async def test_serpapi_events_timeout_propagates(monkeypatch):
+    async def fake_get(self, url, params=None):
+        raise httpx.TimeoutException("serpapi timed out")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    provider = SerpApiEventsProvider("https://serpapi.example/search", "secret-key")
+
+    with pytest.raises(httpx.TimeoutException, match="serpapi timed out"):
+        await provider.search_events("Munich", "de")
 
 
 def _hourly_payload(start: date, end: date, include_probability: bool) -> dict:

@@ -7,6 +7,8 @@ from app.models.schemas import Coordinates, EventCandidate, TripContextResponse
 
 class FakeTravelContextService:
     async def build_trip_context(self, request):
+        if request.destination == "Provider Down":
+            raise RuntimeError("provider rate limit")
         return TripContextResponse(
             destination=request.destination,
             coordinates=Coordinates(lat=48.137154, lon=11.576124),
@@ -54,3 +56,32 @@ def test_trip_context_endpoint_returns_events():
     assert data["coordinates"]["lat"] == 48.137154
     assert data["events"][0]["title"] == "Munich Summer Festival"
     assert data["places"] == []
+
+
+def test_trip_context_endpoint_validates_required_payload():
+    response = client.post(
+        "/trip-context",
+        json={
+            "destination": "",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-05",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_trip_context_endpoint_returns_502_on_provider_failure():
+    response = client.post(
+        "/trip-context",
+        json={
+            "destination": "Provider Down",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-05",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 502
+    assert "provider rate limit" in response.json()["detail"]

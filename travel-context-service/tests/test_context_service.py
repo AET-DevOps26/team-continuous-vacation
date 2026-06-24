@@ -48,7 +48,11 @@ class FakeWeatherProvider:
 
 
 class FallbackGeocoder:
+    def __init__(self):
+        self.calls = 0
+
     async def geocode(self, destination):
+        self.calls += 1
         return GeocodedLocation(
             name="Munich",
             displayName="Munich, Bavaria, Germany",
@@ -82,9 +86,10 @@ class EventProvider:
 
 
 async def test_context_service_uses_photon_fallback_when_nominatim_fails():
+    fallback_geocoder = FallbackGeocoder()
     service = TravelContextService(
         geocoder=FailingGeocoder(),
-        fallback_geocoder=FallbackGeocoder(),
+        fallback_geocoder=fallback_geocoder,
         geocode_cache=TtlCache(60),
         events_cache=TtlCache(60),
     )
@@ -93,6 +98,23 @@ async def test_context_service_uses_photon_fallback_when_nominatim_fails():
 
     assert location.coordinates.lat == 48.137154
     assert location.coordinates.lon == 11.576124
+    assert fallback_geocoder.calls == 1
+
+
+async def test_context_service_reuses_geocode_cache():
+    geocoder = FallbackGeocoder()
+    service = TravelContextService(
+        geocoder=geocoder,
+        fallback_geocoder=FallbackGeocoder(),
+        geocode_cache=TtlCache(60),
+        events_cache=TtlCache(60),
+    )
+
+    first = await service._geocode("Munich")
+    second = await service._geocode("munich")
+
+    assert first == second
+    assert geocoder.calls == 1
 
 
 async def test_context_service_returns_events_and_empty_places():

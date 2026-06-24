@@ -19,6 +19,25 @@ Run commands from the relevant module unless noted.
 - `cd backend && ./gradlew test`: run backend tests only.
 - `docker compose up --build`: build and run Postgres, backend, and frontend together.
 
+## Monitoring & Observability
+
+Stage 1 is Prometheus-only (Grafana + tracing/logs are Stage 2). All monitoring
+config has a **single source of truth** in
+`infrastructure/kubernetes/triptailor/files/monitoring/` (see its `README.md`),
+consumed by both `docker-compose.yml` (via the repo-root `monitoring` symlink) and
+the Helm chart (via `templates/monitoring-prometheus.yaml` + `.Files.Get`). Service
+names match across both environments, so `prometheus/prometheus.yml` needs no
+per-environment variants.
+
+- All four runtime services expose metrics: Spring services at
+  `/actuator/prometheus` (Micrometer), FastAPI services at `/metrics`
+  (`prometheus-fastapi-instrumentator`). New backend `/actuator/*` paths that
+  should be scraped must be permitted in `backend/.../config/SecurityConfig.kt`.
+- Custom GenAI metrics live in `genai-service/app/observability/metrics.py`.
+- Edit alert rules in `files/monitoring/prometheus/alert.rules.yml`; validate with
+  `promtool check rules` before committing.
+- Toggle the K8s stack with the `monitoring.enabled` value (default `true`).
+
 ## Coding Style & Naming Conventions
 
 Use Kotlin idioms in the backend with packages under `com.vacation.app`. Keep class names in `PascalCase`, functions and properties in `camelCase`, and test classes ending in `Tests`.
