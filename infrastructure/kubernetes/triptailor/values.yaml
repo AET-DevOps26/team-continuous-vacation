@@ -130,6 +130,15 @@ monitoring:
       repository: prom/prometheus
       tag: v3.11.0
     resources: {}
+  grafana:
+    enabled: true
+    image:
+      repository: grafana/grafana
+      tag: 12.3.0
+    service:
+      name: grafana
+      port: 3000
+    resources: {}
 
 ingress:
   enabled: false
