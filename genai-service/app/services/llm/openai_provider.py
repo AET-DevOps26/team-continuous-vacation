@@ -5,6 +5,11 @@ from typing import Any
 import httpx
 from openai import AzureOpenAI
 
+from app.observability.metrics import (
+    LLM_REQUESTED_TOKENS,
+    LLM_REQUESTED_TOKENS_TOTAL,
+    LLM_USAGE_TOKENS_TOTAL,
+)
 from app.services.llm.base import LLMGenerationOptions, LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -22,6 +27,7 @@ class OpenAIProvider(LLMProvider):
         """
         Generate a response from the LLM using the OpenAI-compatible API.
         """
+        self._record_requested_tokens("openai-compatible", options)
         url = f"{self.base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -57,6 +63,11 @@ class OpenAIProvider(LLMProvider):
             data = response.json()
             choice = data["choices"][0]
             content = choice["message"].get("content")
+            _record_usage_tokens(
+                provider="openai-compatible",
+                model=self.model_name,
+                usage=data.get("usage"),
+            )
             logger.debug(
                 "Parsed LLM response provider=openai-compatible finish_reason=%s "
                 "usage=%s content_length=%s content=%r",
@@ -98,6 +109,13 @@ class OpenAIProvider(LLMProvider):
         payload["temperature"] = options.temperature
         payload["max_tokens"] = options.max_tokens
 
+    def _record_requested_tokens(
+        self, provider: str, options: LLMGenerationOptions
+    ) -> None:
+        labels = {"provider": provider, "model": self.model_name}
+        LLM_REQUESTED_TOKENS.labels(**labels).observe(options.max_tokens)
+        LLM_REQUESTED_TOKENS_TOTAL.labels(**labels).inc(options.max_tokens)
+
 
 class AzureOpenAIProvider(OpenAIProvider):
     """Azure OpenAI provider using the official OpenAI Python SDK."""
@@ -125,6 +143,7 @@ class AzureOpenAIProvider(OpenAIProvider):
         """
         Generate a response from Azure OpenAI chat completions.
         """
+        self._record_requested_tokens("azure", options)
         payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": [
@@ -153,6 +172,11 @@ class AzureOpenAIProvider(OpenAIProvider):
         content = choice.message.content
         finish_reason = getattr(choice, "finish_reason", None)
         usage = _safe_model_dump(getattr(response, "usage", None))
+        _record_usage_tokens(
+            provider="azure",
+            model=self.model_name,
+            usage=usage,
+        )
         logger.debug(
             "Received LLM response provider=azure finish_reason=%s usage=%s "
             "content_length=%s content=%r raw_response=%s",
@@ -208,3 +232,22 @@ def _safe_model_dump(value: Any) -> Any:
     if hasattr(value, "dict"):
         return value.dict()
     return value
+
+
+def _record_usage_tokens(provider: str, model: str, usage: Any) -> None:
+    usage_dict = _safe_model_dump(usage)
+    if not isinstance(usage_dict, dict):
+        return
+
+    token_fields = {
+        "prompt": usage_dict.get("prompt_tokens"),
+        "completion": usage_dict.get("completion_tokens"),
+        "total": usage_dict.get("total_tokens"),
+    }
+    for token_type, value in token_fields.items():
+        if isinstance(value, (int, float)):
+            LLM_USAGE_TOKENS_TOTAL.labels(
+                provider=provider,
+                model=model,
+                token_type=token_type,
+            ).inc(value)

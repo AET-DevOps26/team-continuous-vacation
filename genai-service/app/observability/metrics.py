@@ -24,3 +24,25 @@ LLM_REQUEST_DURATION_SECONDS = Histogram(
     "genai_llm_request_duration_seconds",
     "Duration of a single LLM provider call in seconds.",
 )
+
+# Requested completion-token budget per LLM call. This measures the configured
+# request ceiling, not the number of tokens the provider actually consumed.
+LLM_REQUESTED_TOKENS = Histogram(
+    "genai_llm_requested_tokens",
+    "Requested completion-token budget for a single LLM provider call.",
+    labelnames=("provider", "model"),
+    buckets=(100, 300, 500, 1000, 2000, 4000, 8000, 16000, 32000),
+)
+
+LLM_REQUESTED_TOKENS_TOTAL = Counter(
+    "genai_llm_requested_completion_tokens_total",
+    "Total requested completion-token budget across LLM provider calls.",
+    labelnames=("provider", "model"),
+)
+
+# Actual provider-reported usage, when the provider returns usage metadata.
+LLM_USAGE_TOKENS_TOTAL = Counter(
+    "genai_llm_usage_tokens_total",
+    "Provider-reported LLM token usage split by prompt, completion, and total.",
+    labelnames=("provider", "model", "token_type"),
+)

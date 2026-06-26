@@ -1,3 +1,5 @@
+from prometheus_client import REGISTRY, generate_latest
+
 from app.models.schemas import (
     Coordinates,
     EventCandidate,
@@ -65,7 +67,9 @@ class EventProvider:
     def __init__(self):
         self.calls = []
 
-    async def search_events(self, location_name, country_code, date_filter=None, language="en"):
+    async def search_events(
+        self, location_name, country_code, date_filter=None, language="en"
+    ):
         self.calls.append(
             {
                 "location_name": location_name,
@@ -99,6 +103,15 @@ async def test_context_service_uses_photon_fallback_when_nominatim_fails():
     assert location.coordinates.lat == 48.137154
     assert location.coordinates.lon == 11.576124
     assert fallback_geocoder.calls == 1
+    metrics = generate_latest(REGISTRY).decode("utf-8")
+    assert (
+        'travel_context_provider_requests_total{outcome="error",provider="nominatim"}'
+        in metrics
+    )
+    assert (
+        'travel_context_provider_requests_total{outcome="success",provider="photon"}'
+        in metrics
+    )
 
 
 async def test_context_service_reuses_geocode_cache():
@@ -143,6 +156,24 @@ async def test_context_service_returns_events_and_empty_places():
     assert response.places == []
     assert events_provider.calls[0]["location_name"] == "Munich"
     assert events_provider.calls[0]["country_code"] == "de"
+    metrics = generate_latest(REGISTRY).decode("utf-8")
+    assert (
+        'travel_context_provider_requests_total{outcome="success",provider="nominatim"}'
+        in metrics
+    )
+    assert (
+        'travel_context_provider_requests_total{outcome="success",provider="serpapi_events"}'
+        in metrics
+    )
+    assert (
+        'travel_context_provider_requests_total{outcome="success",provider="open_meteo"}'
+        in metrics
+    )
+    assert (
+        'travel_context_cache_requests_total{cache="geocode",result="miss"}' in metrics
+    )
+    assert 'travel_context_events_returned_bucket{le="1.0"}' in metrics
+    assert 'travel_context_weather_days_returned_bucket{le="1.0"}' in metrics
 
 
 async def test_context_service_always_returns_weather():

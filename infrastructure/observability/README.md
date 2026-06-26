@@ -8,8 +8,8 @@ create trace IDs, but there is no durable place to view the full waterfall acros
 `backend`, `persistence-service`, `genai-service`, and `travel-context-service`.
 
 Tempo is used for local tracing because it accepts OTLP traces and integrates
-directly with Grafana. The compose override includes a minimal Grafana only for
-local trace viewing; it does not replace the team's Grafana/Prometheus work.
+directly with Grafana. The compose override includes Grafana with both Tempo and
+Prometheus datasources plus the provisioned `TripTailor Services` dashboard.
 
 ## Local Demo
 
@@ -29,7 +29,8 @@ Open Grafana:
 http://localhost:3001
 ```
 
-Use Explore with the `Tempo` datasource and search for recent traces involving:
+Open Dashboards -> TripTailor -> `TripTailor Services` for metrics. Use Explore
+with the `Tempo` datasource and search for recent traces involving:
 
 - `backend`
 - `persistence-service`

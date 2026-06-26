@@ -19,6 +19,13 @@ from app.services.providers.photon_provider import PhotonProvider
 from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
 from app.services.ranking import PlaceRanker
 from app.observability import get_tracer
+from app.metrics import (
+    CACHE_REQUESTS_TOTAL,
+    EVENTS_RETURNED,
+    PROVIDER_DURATION_SECONDS,
+    PROVIDER_REQUESTS_TOTAL,
+    WEATHER_DAYS_RETURNED,
+)
 
 logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
@@ -87,6 +94,8 @@ class TravelContextService:
             )
             span.set_attribute("travel_context.events_count", len(events))
             span.set_attribute("travel_context.weather_days", len(weather))
+            EVENTS_RETURNED.observe(len(events))
+            WEATHER_DAYS_RETURNED.observe(len(weather))
         logger.info(
             "Built travel context destination=%s validated_location=%s events=%s weather_days=%s",
             request.destination,
@@ -125,6 +134,7 @@ class TravelContextService:
         cache_key = f"geocode:{destination.strip().lower()}"
         cached = self.geocode_cache.get(cache_key)
         if cached:
+            CACHE_REQUESTS_TOTAL.labels(cache="geocode", result="hit").inc()
             logger.info(
                 "Geocode cache hit destination=%s name=%s country_code=%s lat=%s lon=%s",
                 destination,
@@ -134,18 +144,32 @@ class TravelContextService:
                 cached.coordinates.lon,
             )
             return cached
+        CACHE_REQUESTS_TOTAL.labels(cache="geocode", result="miss").inc()
         try:
             logger.info(
                 "Geocoding destination with Nominatim destination=%s", destination
             )
-            location = await self.geocoder.geocode(destination)
+            with PROVIDER_DURATION_SECONDS.labels(provider="nominatim").time():
+                location = await self.geocoder.geocode(destination)
+            PROVIDER_REQUESTS_TOTAL.labels(
+                provider="nominatim", outcome="success"
+            ).inc()
         except Exception as error:
+            PROVIDER_REQUESTS_TOTAL.labels(provider="nominatim", outcome="error").inc()
             logger.warning(
                 "Nominatim geocoding failed destination=%s error=%s; trying Photon fallback",
                 destination,
                 error,
             )
-            location = await self.fallback_geocoder.geocode(destination)
+            try:
+                with PROVIDER_DURATION_SECONDS.labels(provider="photon").time():
+                    location = await self.fallback_geocoder.geocode(destination)
+                PROVIDER_REQUESTS_TOTAL.labels(
+                    provider="photon", outcome="success"
+                ).inc()
+            except Exception:
+                PROVIDER_REQUESTS_TOTAL.labels(provider="photon", outcome="error").inc()
+                raise
         logger.info(
             "Geocoded destination=%s name=%s display_name=%r country_code=%s lat=%s lon=%s",
             destination,
@@ -182,6 +206,7 @@ class TravelContextService:
         )
         cached = self.events_cache.get(cache_key)
         if cached is not None:
+            CACHE_REQUESTS_TOTAL.labels(cache="events", result="hit").inc()
             logger.info(
                 "Events cache hit location=%s country_code=%s date_filter=%s events=%s",
                 location_name,
@@ -190,17 +215,28 @@ class TravelContextService:
                 len(cached),
             )
             return cached
+        CACHE_REQUESTS_TOTAL.labels(cache="events", result="miss").inc()
         logger.info(
             "Searching events location=%s country_code=%s date_filter=%s",
             location_name,
             country_code,
             date_filter,
         )
-        events = await self.events_provider.search_events(
-            location_name=location_name,
-            country_code=country_code,
-            date_filter=date_filter,
-        )
+        try:
+            with PROVIDER_DURATION_SECONDS.labels(provider="serpapi_events").time():
+                events = await self.events_provider.search_events(
+                    location_name=location_name,
+                    country_code=country_code,
+                    date_filter=date_filter,
+                )
+            PROVIDER_REQUESTS_TOTAL.labels(
+                provider="serpapi_events", outcome="success"
+            ).inc()
+        except Exception:
+            PROVIDER_REQUESTS_TOTAL.labels(
+                provider="serpapi_events", outcome="error"
+            ).inc()
+            raise
         limited_events = events[: settings.EVENT_SEARCH_LIMIT]
         self.events_cache.set(cache_key, limited_events)
         return limited_events
@@ -231,6 +267,7 @@ class TravelContextService:
         )
         cached = self.weather_cache.get(cache_key)
         if cached is not None:
+            CACHE_REQUESTS_TOTAL.labels(cache="weather", result="hit").inc()
             logger.info(
                 "Weather cache hit lat=%s lon=%s start=%s end=%s days=%s",
                 coordinates.lat,
@@ -240,15 +277,21 @@ class TravelContextService:
                 len(cached),
             )
             return cached
+        CACHE_REQUESTS_TOTAL.labels(cache="weather", result="miss").inc()
 
         try:
-            weather = await self.weather_provider.get_weather(
-                coordinates=coordinates,
-                start_date=start_date,
-                end_date=end_date,
-                today=date.today(),
-            )
+            with PROVIDER_DURATION_SECONDS.labels(provider="open_meteo").time():
+                weather = await self.weather_provider.get_weather(
+                    coordinates=coordinates,
+                    start_date=start_date,
+                    end_date=end_date,
+                    today=date.today(),
+                )
+            PROVIDER_REQUESTS_TOTAL.labels(
+                provider="open_meteo", outcome="success"
+            ).inc()
         except Exception as error:
+            PROVIDER_REQUESTS_TOTAL.labels(provider="open_meteo", outcome="error").inc()
             # Weather is a best-effort enhancement; never fail the whole context.
             logger.warning(
                 "Weather lookup failed lat=%s lon=%s start=%s end=%s error=%s",

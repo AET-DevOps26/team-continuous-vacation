@@ -82,6 +82,7 @@ compose logs --tail=60 backend persistence-service genai-service travel-context-
 
 echo
 echo "Open Grafana at ${GRAFANA_URL}"
+echo "Open Dashboards -> TripTailor -> TripTailor Services for metrics."
 echo "Use Explore -> Tempo and search recent traces for services:"
 echo "  backend, persistence-service, genai-service, travel-context-service"
 echo
