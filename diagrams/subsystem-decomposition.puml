@@ -1,0 +1,75 @@
+@startuml subsystem-decomposition
+!pragma layout smetana
+title TripTailor - Subsystem Decomposition
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundCorner 10
+skinparam componentStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultTextAlignment center
+skinparam ArrowColor #475569
+skinparam ArrowThickness 1.2
+skinparam packageBorderColor #64748B
+skinparam packageBackgroundColor #F8FAFC
+skinparam component {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+}
+skinparam database {
+  BackgroundColor #F0FDF4
+  BorderColor #16A34A
+  FontColor #0F172A
+}
+skinparam cloud {
+  BackgroundColor #FFF7ED
+  BorderColor #EA580C
+  FontColor #0F172A
+}
+
+actor Traveler
+
+rectangle "TripTailor System" {
+  component "Gateway\nNGINX" as Gateway
+  component "Web Client\nReact / Refine" as Frontend
+  component "Application API\nSpring Boot" as Backend
+  component "Persistence Service\nSpring Boot" as Persistence
+  component "GenAI Service\nFastAPI" as GenAI
+  component "Travel Context Service\nFastAPI" as Context
+  database "PostgreSQL" as Database
+
+  rectangle "Observability" {
+    component "Prometheus\nscrapes all runtime services" as Prometheus
+    component "Grafana" as Grafana
+    component "Tempo\nreceives OTLP traces" as Tempo
+  }
+}
+
+cloud "Configured LLM\nAzure OpenAI or local endpoint" as LLM
+cloud "Travel Data Providers\nNominatim / Photon (geocoding)\nOverpass API (places)\nSerpApi (events)\nOpen-Meteo (weather)" as Providers
+
+Traveler --> Gateway : HTTPS
+Gateway --> Frontend : /*\nstatic application
+Gateway --> Backend : /api/*\nJSON/HTTPS
+
+Backend --> Persistence : Traveler/trip REST
+Backend --> GenAI : Schedule/alternative REST
+Persistence --> Database : JDBC/SQL
+GenAI --> LLM : OpenAI-compatible API\nstructured generation
+GenAI --> Context : POST /context
+Context --> Providers : Provider-specific HTTPS APIs
+
+Prometheus ..> Backend
+Grafana --> Prometheus : PromQL
+Backend ..> Tempo
+Grafana --> Tempo : trace queries
+
+legend left
+  |= Direction |= Meaning |
+  | solid arrow | runtime request or data flow |
+  | dotted arrow | representative telemetry flow for all runtime services |
+endlegend
+
+@enduml

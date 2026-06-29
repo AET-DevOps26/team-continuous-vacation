@@ -1,0 +1,67 @@
+@startuml use-case-diagram
+!pragma layout smetana
+title TripTailor - Use Case Diagram
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundCorner 10
+skinparam defaultFontName Arial
+skinparam ArrowColor #475569
+skinparam actor {
+  BorderColor #0F172A
+  FontColor #0F172A
+}
+skinparam usecase {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+}
+skinparam rectangle {
+  BorderColor #64748B
+  BackgroundColor #F8FAFC
+}
+
+actor Traveler
+actor "Configured LLM" as LLM
+actor "Travel Data Providers" as Providers
+
+rectangle "TripTailor" {
+  usecase "Start demo session" as Demo
+  usecase "Register account" as Register
+  usecase "Log in" as Login
+  usecase "View saved trips" as ListTrips
+  usecase "View itinerary" as ViewTrip
+  usecase "Create personalized trip" as CreateTrip
+  usecase "Generate structured schedule" as Generate
+  usecase "Enrich generation with\nplaces, events, and weather" as Enrich
+  usecase "Regenerate one activity" as Regenerate
+  usecase "Suggest contextual alternative" as Alternative
+  usecase "Delete activity" as DeleteActivity
+  usecase "Delete trip" as DeleteTrip
+  usecase "Persist itinerary changes" as Persist
+}
+
+Traveler --> Demo
+Traveler --> Register
+Traveler --> Login
+Traveler --> ListTrips
+Traveler --> ViewTrip
+Traveler --> CreateTrip
+Traveler --> Regenerate
+Traveler --> DeleteActivity
+Traveler --> DeleteTrip
+
+CreateTrip ..> Generate : <<include>>
+CreateTrip ..> Persist : <<include>>
+Generate ..> Enrich : <<include>>
+Regenerate ..> Alternative : <<include>>
+Regenerate ..> Persist : <<include>>
+DeleteActivity ..> Persist : <<include>>
+DeleteTrip ..> Persist : <<include>>
+
+LLM --> Generate
+LLM --> Alternative
+Providers --> Enrich
+
+@enduml

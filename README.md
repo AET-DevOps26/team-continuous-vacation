@@ -51,6 +51,52 @@ TripTailor runs as five application services plus Postgres:
 
 In Docker Compose and Kubernetes, the gateway exposes the frontend and routes `/api/*` to the backend. Persistence, GenAI, travel-context, and Postgres are internal implementation services.
 
+## Architecture
+
+TripTailor uses independently deployable services with explicit HTTP contracts. The browser loads the React application through the NGINX gateway and sends all application requests to the public Spring Boot backend. That backend is the system's security and orchestration boundary: it authenticates travelers with signed JWTs, validates public requests, coordinates trip generation, and prevents clients from calling internal services directly.
+
+The backend delegates durable state to the persistence service, which is the only application service allowed to access PostgreSQL. For trip creation and activity regeneration, the backend calls the GenAI service. The GenAI service builds prompts, requests structured output from the configured LLM, validates that output with Pydantic models, and assigns the identifiers required by the application contract. Before schedule generation, it requests destination context from the travel-context service. That service encapsulates geocoding, place, event, and weather providers, including caching and ranking, so provider-specific concerns do not leak into trip orchestration.
+
+All application-owned HTTP service interfaces use JSON and are described in `api-specification/`. The public contract is `frontend.yaml`; internal contracts isolate persistence, GenAI, and travel-context behavior. Runtime deployment is available through Docker Compose and the Helm chart. Prometheus scrapes every backend service, Grafana visualizes the exported metrics, and Tempo receives distributed traces.
+
+### Subsystems and interfaces
+
+| Caller | Callee | Interface | Responsibility |
+| --- | --- | --- | --- |
+| Browser frontend | Backend API | `/api/*` through NGINX; public OpenAPI contract | Authentication and traveler-facing trip workflows |
+| Backend API | Persistence service | Internal REST; persistence OpenAPI contract | Traveler, trip, day, and activity storage |
+| Backend API | GenAI service | Internal REST; GenAI OpenAPI contract | Schedule generation and contextual activity alternatives |
+| GenAI service | Travel-context service | `POST /context`; travel-context OpenAPI contract | Ranked destination, place, event, and weather context |
+| Persistence service | PostgreSQL | JDBC/SQL | Durable application state |
+| GenAI service | Configured LLM | OpenAI-compatible HTTPS API | Schema-constrained schedule and activity generation |
+| Travel-context service | External providers | Provider-specific HTTPS APIs | Geocoding, places, events, and weather |
+| Prometheus | Runtime services | `/actuator/prometheus` or `/metrics` | Metrics collection and alert evaluation |
+| Runtime services | Tempo | OTLP/HTTP | Distributed trace export |
+| Grafana | Prometheus and Tempo | PromQL and trace queries | Operational dashboards and trace exploration |
+
+### UML diagrams
+
+The PlantUML sources in `diagrams/` are version-controlled documentation of the implemented system:
+
+- [Subsystem Decomposition](diagrams/subsystem-decomposition.puml) — deployable subsystems, external dependencies, runtime interfaces, and telemetry paths.
+- [Use Case Diagram](diagrams/use-case-diagram.puml) — traveler goals and the supporting LLM and travel-data actors.
+- [Analysis Object Model](diagrams/analysis-object-model.puml) — implementation-aligned domain entities and their cardinalities.
+- [Itinerary Creation Flow](diagrams/creation-flow-diagram.puml) — request sequence for generating and saving a trip.
+- [Activity Update Flow](diagrams/update-flow-diagram.puml) — request sequence for regenerating one activity.
+- [Class Diagram](diagrams/class-diagram.puml) — detailed trip and activity data types.
+
+#### Subsystem Decomposition
+
+![TripTailor subsystem decomposition](diagrams/rendered/subsystem-decomposition.svg)
+
+#### Use Case Diagram
+
+![TripTailor use case diagram](diagrams/rendered/use-case-diagram.svg)
+
+#### Analysis Object Model
+
+![TripTailor analysis object model](diagrams/rendered/analysis-object-model.svg)
+
 ## Local Commands
 
 Run commands from the module directory unless noted.
