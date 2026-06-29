@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>MagicNumber:ApiExceptionHandler.kt:ApiExceptionHandler$400</ID>
+    <ID>MagicNumber:ApiExceptionHandler.kt:ApiExceptionHandler$409</ID>
+    <ID>MagicNumber:TripTailorRepository.kt:TripTailorRepository$400</ID>
+    <ID>MagicNumber:TripTailorRepository.kt:TripTailorRepository$404</ID>
+    <ID>MaxLineLength:ApiExceptionHandler.kt:ApiExceptionHandler$ResponseEntity.status(exception.status).body(ApiError(exception.type, exception.message, exception.detail, exception.status))</ID>
+    <ID>MaxLineLength:PersistenceApiE2ETest.kt:PersistenceApiE2ETest$content = """{"id":"$replacementId","dayId":"$dayId","timeBlock":"AFTERNOON","title":"Museum","description":"Indoor visit","durationMinutes":90,"isIndoor":true,"tags":["INDOOR"]}"""</ID>
+    <ID>MaxLineLength:PersistenceApiE2ETest.kt:PersistenceApiE2ETest$content = """{"id":"${UUID.randomUUID()}","dayId":"$dayId","timeBlock":"AFTERNOON","title":"Museum","description":"Indoor visit","durationMinutes":90,"isIndoor":true,"tags":["INDOOR"]}"""</ID>
+    <ID>MaxLineLength:TravelerController.kt:TravelerController$fun</ID>
+    <ID>MaxLineLength:TripTailorRepository.kt:TripTailorRepository$Trip(rs.uuid("id"), rs.getString("destination"), rs.localDate("start_date"), rs.localDate("end_date"), rs.getString("vibe"), Schedule(emptyList()))</ID>
+    <ID>MaxLineLength:TripTailorRepository.kt:TripTailorRepository$jdbc.query("select * from activities where id = :activityId", params("activityId" to activityId)) { rs, _ -&gt; activityFrom(rs) }</ID>
+    <ID>MaxLineLength:TripTailorRepository.kt:TripTailorRepository$jdbc.update("delete from trips where id = :tripId and traveler_id = :travelerId", params("tripId" to tripId, "travelerId" to travelerId))</ID>
+    <ID>TooManyFunctions:TripTailorRepository.kt:TripTailorRepository</ID>
+  </CurrentIssues>
+</SmellBaseline>

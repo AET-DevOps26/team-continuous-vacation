@@ -89,58 +89,72 @@ class OpenMeteoWeatherProvider:
         historical_dates = [d for d in trip_dates if d not in forecast_dates]
 
         result: dict[date, WeatherDaily] = {}
-
-        # The forecast and historical segments are fetched independently so that a
-        # failure in one (e.g. a date just past the provider's allowed window) still
-        # lets the other segment's days through instead of losing all weather.
-        if forecast_dates:
-            try:
-                by_date = await self._fetch_buckets(
-                    self.forecast_base_url,
-                    coordinates,
-                    forecast_dates[0],
-                    forecast_dates[-1],
-                    include_probability=True,
-                )
-                for trip_date in forecast_dates:
-                    records = by_date.get(trip_date)
-                    if records:
-                        result[trip_date] = _build_daily(trip_date, "forecast", None, records)
-            except Exception as error:
-                logger.warning(
-                    "Open-Meteo forecast segment failed start=%s end=%s error=%s",
-                    forecast_dates[0],
-                    forecast_dates[-1],
-                    error,
-                )
-
-        if historical_dates:
-            reference_map = {d: _prior_year(d) for d in historical_dates}
-            references = sorted(reference_map.values())
-            try:
-                by_date = await self._fetch_buckets(
-                    self.archive_base_url,
-                    coordinates,
-                    references[0],
-                    references[-1],
-                    include_probability=False,
-                )
-                for trip_date in historical_dates:
-                    reference_date = reference_map[trip_date]
-                    records = by_date.get(reference_date)
-                    if records:
-                        result[trip_date] = _build_daily(
-                            trip_date, "historical", reference_date, records
-                        )
-            except Exception as error:
-                logger.warning(
-                    "Open-Meteo historical segment failed start=%s end=%s error=%s",
-                    references[0],
-                    references[-1],
-                    error,
-                )
-
+        # Fetch segments independently so one provider-window failure does not
+        # discard weather already available from the other endpoint.
+        await self._load_forecast(coordinates, forecast_dates, result)
+        await self._load_historical(coordinates, historical_dates, result)
         return [result[d] for d in trip_dates if d in result]
+
+    async def _load_forecast(
+        self,
+        coordinates: Coordinates,
+        forecast_dates: list[date],
+        result: dict[date, WeatherDaily],
+    ) -> None:
+        if not forecast_dates:
+            return
+        try:
+            by_date = await self._fetch_buckets(
+                self.forecast_base_url,
+                coordinates,
+                forecast_dates[0],
+                forecast_dates[-1],
+                include_probability=True,
+            )
+            for trip_date in forecast_dates:
+                records = by_date.get(trip_date)
+                if records:
+                    result[trip_date] = _build_daily(trip_date, "forecast", None, records)
+        except Exception as error:
+            logger.warning(
+                "Open-Meteo forecast segment failed start=%s end=%s error=%s",
+                forecast_dates[0],
+                forecast_dates[-1],
+                error,
+            )
+
+    async def _load_historical(
+        self,
+        coordinates: Coordinates,
+        historical_dates: list[date],
+        result: dict[date, WeatherDaily],
+    ) -> None:
+        if not historical_dates:
+            return
+        reference_map = {d: _prior_year(d) for d in historical_dates}
+        references = sorted(reference_map.values())
+        try:
+            by_date = await self._fetch_buckets(
+                self.archive_base_url,
+                coordinates,
+                references[0],
+                references[-1],
+                include_probability=False,
+            )
+            for trip_date in historical_dates:
+                reference_date = reference_map[trip_date]
+                records = by_date.get(reference_date)
+                if records:
+                    result[trip_date] = _build_daily(
+                        trip_date, "historical", reference_date, records
+                    )
+        except Exception as error:
+            logger.warning(
+                "Open-Meteo historical segment failed start=%s end=%s error=%s",
+                references[0],
+                references[-1],
+                error,
+            )
 
     async def _fetch_buckets(
         self,

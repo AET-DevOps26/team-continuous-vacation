@@ -3,6 +3,7 @@ plugins {
 	kotlin("plugin.spring") version "2.2.21"
 	id("org.springframework.boot") version "4.0.6"
 	id("io.spring.dependency-management") version "1.1.7"
+	id("dev.detekt") version "2.0.0-alpha.5"
 	jacoco
 }
 
@@ -17,6 +18,18 @@ java {
 
 repositories {
 	mavenCentral()
+}
+
+configurations.matching { it.name == "detekt" }.configureEach {
+	resolutionStrategy.eachDependency {
+		if (requested.group == "org.jetbrains.kotlin") {
+			useVersion("2.4.0")
+		}
+	}
+}
+
+detekt {
+	baseline = file("detekt-baseline.xml")
 }
 
 dependencies {
