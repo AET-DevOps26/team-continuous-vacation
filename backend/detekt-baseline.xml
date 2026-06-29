@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>EmptyFunctionBlock:DemoApplicationTests.kt:DemoApplicationTests${ }</ID>
+    <ID>LongMethod:OpenApiController.kt:OpenApiController$private fun swaggerUiHtml: String</ID>
+    <ID>MagicNumber:ApiExceptionHandler.kt:ApiExceptionHandler$400</ID>
+    <ID>MagicNumber:AuthService.kt:AuthService$401</ID>
+    <ID>MagicNumber:AuthService.kt:AuthService$409</ID>
+    <ID>MagicNumber:SecurityConfig.kt:SecurityConfig$32</ID>
+    <ID>MagicNumber:TripService.kt:TripService$400</ID>
+    <ID>MaxLineLength:AppApiE2ETest.kt:InMemoryPersistenceClient$authRecords[email] ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)</ID>
+    <ID>MaxLineLength:AppApiE2ETest.kt:InMemoryPersistenceClient$authRecords[request.email] = TravelerAuthRecord(traveler.id, request.email, request.passwordHash, traveler.isDemo, traveler.createdAt)</ID>
+    <ID>MaxLineLength:AppApiE2ETest.kt:InMemoryPersistenceClient$trips[travelerId]?.get(tripId) ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)</ID>
+    <ID>MaxLineLength:AppApiE2ETest.kt:InMemoryPersistenceClient$val travelerTrips = trips[travelerId] ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)</ID>
+    <ID>MaxLineLength:HttpGenAiClient.kt:HttpGenAiClient$override</ID>
+    <ID>MaxLineLength:SecurityConfig.kt:SecurityConfig$it.requestMatchers("/", "/openapi.yaml", "/health", "/actuator/health", "/actuator/prometheus", "/auth/**", "/debug/instance").permitAll()</ID>
+    <ID>MaxLineLength:SecurityConfig.kt:SecurityConfig$response.writer.write("""{"type":"UNAUTHORIZED","title":"Unauthorized","detail":"A valid bearer token is required.","status":401}""")</ID>
+    <ID>SwallowedException:AuthService.kt:AuthService$exception: WebClientResponseException.Conflict</ID>
+    <ID>SwallowedException:AuthService.kt:AuthService$exception: WebClientResponseException.NotFound</ID>
+    <ID>TooGenericExceptionCaught:TripService.kt:TripService$exception: RuntimeException</ID>
+  </CurrentIssues>
+</SmellBaseline>

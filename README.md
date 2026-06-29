@@ -58,13 +58,26 @@ Run commands from the module directory unless noted.
 | Area | Validate | Coverage |
 | --- | --- | --- |
 | Frontend | `npm run lint && npm run test && npm run build` | `npm run test:coverage` |
-| Backend API | `./gradlew build` | `./gradlew test jacocoTestReport` |
-| Persistence Service | `./gradlew build` | `./gradlew test jacocoTestReport` |
-| GenAI Service | `python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
-| Travel Context Service | `python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
+| Backend API | `./gradlew build` (includes Detekt) | `./gradlew test jacocoTestReport` |
+| Persistence Service | `./gradlew build` (includes Detekt) | `./gradlew test jacocoTestReport` |
+| GenAI Service | `flake8 app tests && mypy app && python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
+| Travel Context Service | `flake8 app tests && mypy app && python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
 | Full local stack | `docker compose up --build` | Not applicable; use module coverage commands. |
 
 Python services expect dependencies from `requirements.txt` and `requirements-dev.txt` to be installed in the active virtual environment.
+
+## CI/CD
+
+GitHub Actions runs `.github/workflows/ci.yaml` for every pull request targeting `main` and every push to `main`. The pipeline treats all quality checks as blocking:
+
+- Frontend: ESLint, Vitest with coverage, TypeScript compilation, and the production build.
+- Kotlin services: Gradle build, JUnit tests, JaCoCo coverage, and Detekt static analysis through the Gradle `check` lifecycle.
+- Python services: Flake8 over application and test code, mypy type checking, and pytest with coverage.
+- Full stack: Docker Compose image builds after every service job succeeds.
+
+Coverage reports are uploaded as workflow artifacts. Deployment and container-image workflows are defined separately in `.github/workflows/`.
+
+Each Kotlin service keeps a reviewed `detekt-baseline.xml` for findings that predate enforcement. The baseline records those findings while Detekt fails the build for every new violation. Baselines should only be regenerated after the recorded findings have been reviewed or fixed.
 
 ## Source Of Truth And Generated Files
 
