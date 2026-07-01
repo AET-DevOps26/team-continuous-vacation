@@ -1,62 +1,79 @@
 @startuml analysis-object-model
+!pragma layout smetana
 title TripTailor - Analysis Object Model
 
-class Trip {
-  destination
-  dates
-  vibe
-  + view()
-  + create()
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundCorner 10
+skinparam defaultFontName Arial
+skinparam ArrowColor #475569
+skinparam class {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
 }
 
-class Day {
-  date
-  + view()
+class Traveler <<entity>> {
+  id: UUID
+  email: String [0..1]
+  passwordHash: String [0..1]
+  isDemo: Boolean
+  createdAt: Instant
 }
 
-class Activity {
-  title
-  description
-  duration
-  timeBlock
-  tags
-  + view()
-  + regenerate()
+class Trip <<entity>> {
+  id: UUID
+  destination: String
+  startDate: LocalDate
+  endDate: LocalDate
+  vibe: String
 }
 
-class Traveler {
-  email
-  isDemo
-  + createTrip()
-  + editActivity()
+class Schedule <<value object>>
+
+class Day <<entity>> {
+  id: UUID
+  dayNumber: Integer
+  date: LocalDate
 }
 
-class BackendAPI {
-  + register()
-  + login()
-  + createTrip()
-  + regenerateActivity()
+class Activity <<entity>> {
+  id: UUID
+  timeBlock: TimeBlock
+  title: String
+  description: String
+  durationMinutes: Integer
+  isIndoor: Boolean [0..1]
+  tags: ActivityTag [0..*]
 }
 
-class GenAIService {
-  + generateSchedule()
-  + suggestAlternative()
+enum TimeBlock {
+  MORNING
+  NOON
+  AFTERNOON
+  EVENING
+  NIGHT
 }
 
-class PersistenceService {
-  + saveTrip()
-  + getTrip()
-  + updateActivity()
+enum ActivityTag {
+  OUTDOOR
+  INDOOR
+  CULTURAL
+  SPORTY
+  RELAXING
+  ADVENTUROUS
+  FOOD
+  SHOPPING
+  ENTERTAINMENT
+  FAMILY_FRIENDLY
+  PARTY
 }
 
-Trip "1" -- "*" Day
-Day "1" -- "*" Activity
-
-Traveler ..> Trip : creates/views
-Traveler ..> Activity : edits/regenerates
-
-BackendAPI ..> GenAIService : uses
-BackendAPI ..> PersistenceService : uses
-PersistenceService ..> Trip : stores
+Traveler "1" -- "0..*" Trip : owns >
+Trip "1" *-- "1" Schedule
+Schedule "1" *-- "1..*" Day
+Day "1" *-- "0..*" Activity
+Activity --> "1" TimeBlock
+Activity --> "0..*" ActivityTag
 
 @enduml

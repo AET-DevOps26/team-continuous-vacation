@@ -1,0 +1,64 @@
+@startuml use-case-diagram
+!pragma layout smetana
+title TripTailor - Use Case Diagram
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundCorner 10
+skinparam defaultFontName Arial
+skinparam ArrowColor #475569
+skinparam actor {
+  BorderColor #0F172A
+  FontColor #0F172A
+}
+skinparam usecase {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #0F172A
+}
+skinparam rectangle {
+  BorderColor #64748B
+  BackgroundColor #F8FAFC
+}
+
+actor Traveler
+rectangle "«actor»\nLLM Provider" as LLM #FFF7ED
+rectangle "«actor»\nTravel Data Providers" as Providers #FFF7ED
+
+rectangle "TripTailor" {
+  usecase "Start demo session" as Demo
+  usecase "Register account" as Register
+  usecase "Log in" as Login
+  usecase "Log out" as Logout
+  usecase "View saved trips" as ListTrips
+  usecase "View itinerary" as ViewTrip
+  usecase "Create personalized trip" as CreateTrip
+  usecase "Generate structured schedule" as Generate
+  usecase "Retrieve destination context" as Enrich
+  usecase "Regenerate one activity" as Regenerate
+  usecase "Suggest contextual alternative" as Alternative
+  usecase "Delete activity" as DeleteActivity
+  usecase "Delete trip" as DeleteTrip
+}
+
+Traveler -- Demo
+Traveler -- Register
+Traveler -- Login
+Traveler -- Logout
+Traveler -- ListTrips
+Traveler -- ViewTrip
+Traveler -- CreateTrip
+Traveler -- Regenerate
+Traveler -- DeleteActivity
+Traveler -- DeleteTrip
+
+CreateTrip ..> Generate : <<include>>
+Generate ..> Enrich : <<include>>
+Regenerate ..> Alternative : <<include>>
+
+LLM -- Generate
+LLM -- Alternative
+Providers -- Enrich
+
+@enduml
