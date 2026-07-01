@@ -117,8 +117,11 @@ services:
     container_name: triptailor-prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
     volumes:
       - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
     ports:
       - "9090:9090"
     depends_on:
@@ -129,4 +132,6 @@ services:
 
 volumes:
   pgdata:
+    driver: local
+  prometheus-data:
     driver: local
