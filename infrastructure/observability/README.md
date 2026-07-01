@@ -8,7 +8,7 @@ create trace IDs, but there is no durable place to view the full waterfall acros
 `backend`, `persistence-service`, `genai-service`, and `travel-context-service`.
 
 Tempo is used for local tracing because it accepts OTLP traces and integrates
-directly with Grafana. The compose override includes Grafana with both Tempo and
+directly with Grafana. Docker Compose includes Grafana with both Tempo and
 Prometheus datasources plus the provisioned `TripTailor Services` dashboard.
 
 ## Local Demo
@@ -19,9 +19,8 @@ Run from the repository root:
 ./scripts/demo-tracing.sh
 ```
 
-The script starts Docker Compose with `docker-compose.tracing.yml`, sends a trip
-generation request through the gateway, prints recent logs with trace IDs, and
-shows where to inspect traces.
+The script starts Docker Compose, sends a trip generation request through the
+gateway, prints recent logs with trace IDs, and shows where to inspect traces.
 
 Open Grafana:
 

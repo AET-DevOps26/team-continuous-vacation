@@ -16,7 +16,7 @@ for command in "${required_commands[@]}"; do
 done
 
 compose() {
-	docker compose -f "${ROOT_DIR}/docker-compose.yml" -f "${ROOT_DIR}/docker-compose.tracing.yml" "$@"
+	docker compose "$@"
 }
 
 echo "Starting TripTailor with Tempo and Grafana tracing..."

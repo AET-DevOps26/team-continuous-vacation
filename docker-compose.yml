@@ -38,11 +38,15 @@ services:
     environment:
       - PERSISTENCE_BASE_URL=http://persistence-service:8081
       - GENAI_BASE_URL=http://genai-service:8000
+      - TRACING_OTLP_ENDPOINT=http://tempo:4318/v1/traces
+      - OTEL_TRACES_SAMPLER_ARG=1.0
     depends_on:
       persistence-service:
         condition: service_started
       genai-service:
         condition: service_healthy
+      tempo:
+        condition: service_started
 
   persistence-service:
     build:
@@ -56,11 +60,15 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/triptailor
       - SPRING_DATASOURCE_USERNAME=tripuser
       - SPRING_DATASOURCE_PASSWORD=trippassword
+      - TRACING_OTLP_ENDPOINT=http://tempo:4318/v1/traces
+      - OTEL_TRACES_SAMPLER_ARG=1.0
     depends_on:
       db:
         condition: service_healthy
       genai-service:
         condition: service_healthy
+      tempo:
+        condition: service_started
 
   genai-service:
     build:
@@ -70,6 +78,14 @@ services:
       - "8000"
     environment:
       - TRAVEL_CONTEXT_BASE_URL=http://travel-context-service:8090
+      - OTEL_SERVICE_NAME=genai-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_PROPAGATORS=tracecontext,baggage
+      - OTEL_TRACES_SAMPLER=parentbased_traceidratio
+      - OTEL_TRACES_SAMPLER_ARG=1.0
     env_file:
       - path: ./genai-service/.env.example
       - path: ./genai-service/.env
@@ -77,6 +93,8 @@ services:
     depends_on:
       travel-context-service:
         condition: service_healthy
+      tempo:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -94,12 +112,24 @@ services:
       - path: ./travel-context-service/.env.example
       - path: ./travel-context-service/.env
         required: false
+    environment:
+      - OTEL_SERVICE_NAME=travel-context-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_PROPAGATORS=tracecontext,baggage
+      - OTEL_TRACES_SAMPLER=parentbased_traceidratio
+      - OTEL_TRACES_SAMPLER_ARG=1.0
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    depends_on:
+      tempo:
+        condition: service_started
 
   frontend:
     build:
@@ -126,6 +156,33 @@ services:
       - persistence-service
       - genai-service
       - travel-context-service
+
+  tempo:
+    image: grafana/tempo:2.9.0
+    container_name: triptailor-tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ./infrastructure/observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+
+  grafana:
+    image: grafana/grafana:12.3.0
+    container_name: triptailor-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - tempo
+      - prometheus
 
 volumes:
   pgdata:
