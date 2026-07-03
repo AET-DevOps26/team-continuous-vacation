@@ -17,6 +17,9 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html", "lcov"],
       reportsDirectory: "./coverage",
+      thresholds: {
+        lines: 80,
+      },
       exclude: [
         "src/components/ui/**",
         "src/components/refine-ui/**",
