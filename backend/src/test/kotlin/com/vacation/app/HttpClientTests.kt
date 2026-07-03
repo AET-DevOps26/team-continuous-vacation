@@ -103,102 +103,158 @@ class HttpClientTests {
 	@Test
 	fun `persistence client sends expected requests and maps traveler auth and trip responses`() {
 		RecordingHttpServer().use { server ->
-			server.enqueueJson(
-				"""
-				{
-				  "id": "00000000-0000-0000-0000-000000000301",
-				  "email": "ada@example.com",
-				  "isDemo": false,
-				  "createdAt": "2026-07-01T10:15:30Z"
-				}
-				""".trimIndent(),
-			)
-			server.enqueueJson(
-				"""
-				{
-				  "id": "00000000-0000-0000-0000-000000000301",
-				  "email": "ada@example.com",
-				  "passwordHash": "hash",
-				  "isDemo": false,
-				  "createdAt": "2026-07-01T10:15:30Z"
-				}
-				""".trimIndent(),
-			)
-			server.enqueueJson(
-				"""
-				[
-				  {
-				    "id": "00000000-0000-0000-0000-000000000401",
-				    "destination": "Vienna",
-				    "startDate": "2026-07-10",
-				    "endDate": "2026-07-11"
-				  }
-				]
-				""".trimIndent(),
-			)
-			server.enqueueJson(tripJson())
-			server.enqueueJson(tripJson())
-			server.enqueueNoContent()
-			server.enqueueJson(activityJson("Updated activity", isIndoor = true))
-			server.enqueueNoContent()
+			enqueuePersistenceResponses(server)
 
-			val client = HttpPersistenceClient(WebClient.builder(), server.baseUrl)
-			val travelerId = UUID.fromString("00000000-0000-0000-0000-000000000301")
-			val tripId = UUID.fromString("00000000-0000-0000-0000-000000000401")
-			val dayId = UUID.fromString("00000000-0000-0000-0000-000000000101")
-			val activityId = UUID.fromString("00000000-0000-0000-0000-000000000201")
+			val ids = PersistenceIds()
+			val result = exercisePersistenceClient(server, ids)
 
-			val traveler = client.createTraveler(TravelerCreateRequest("ada@example.com", "hash", isDemo = false))
-			val authRecord = client.findTravelerAuthRecordByEmail("ada@example.com")
-			val summaries = client.listTrips(travelerId)
-			val savedTrip = client.saveTrip(travelerId, trip())
-			val fetchedTrip = client.getTrip(travelerId, tripId)
-			client.deleteTrip(travelerId, tripId)
-			val updatedActivity = client.updateActivity(tripId, dayId, activityId, activity("Updated activity", isIndoor = true))
-			client.deleteActivity(tripId, dayId, activityId)
-
-			assertEquals(travelerId, traveler.id)
-			assertEquals("hash", authRecord.passwordHash)
-			assertEquals("Vienna", summaries.single().destination)
-			assertEquals("Vienna", savedTrip.destination)
-			assertEquals("Vienna", fetchedTrip.destination)
-			assertEquals("Updated activity", updatedActivity.title)
-
-			val requests = server.requests()
-			assertEquals("POST", requests[0].method)
-			assertEquals("/travelers", requests[0].path)
-			assertEquals("ada@example.com", JsonPath.read(requests[0].body, "$.email"))
-			assertFalse(JsonPath.read<Boolean>(requests[0].body, "$.isDemo"))
-
-			assertEquals("GET", requests[1].method)
-			assertEquals("/travelers/auth-record", requests[1].path)
-			assertEquals("email=ada@example.com", requests[1].query)
-
-			assertEquals("GET", requests[2].method)
-			assertEquals("/trips", requests[2].path)
-			assertEquals("travelerId=$travelerId", requests[2].query)
-
-			assertEquals("POST", requests[3].method)
-			assertEquals("/trips", requests[3].path)
-			assertEquals("travelerId=$travelerId", requests[3].query)
-			assertEquals("Vienna", JsonPath.read(requests[3].body, "$.destination"))
-
-			assertEquals("GET", requests[4].method)
-			assertEquals("/trips/$tripId", requests[4].path)
-			assertEquals("travelerId=$travelerId", requests[4].query)
-
-			assertEquals("DELETE", requests[5].method)
-			assertEquals("/trips/$tripId", requests[5].path)
-			assertEquals("travelerId=$travelerId", requests[5].query)
-
-			assertEquals("PUT", requests[6].method)
-			assertEquals("/trips/$tripId/days/$dayId/activities/$activityId", requests[6].path)
-			assertTrue(JsonPath.read<Boolean>(requests[6].body, "$.isIndoor"))
-
-			assertEquals("DELETE", requests[7].method)
-			assertEquals("/trips/$tripId/days/$dayId/activities/$activityId", requests[7].path)
+			assertPersistenceResponses(ids, result)
+			assertPersistenceRequests(ids, server.requests())
 		}
 	}
+
+	private fun enqueuePersistenceResponses(server: RecordingHttpServer) {
+		server.enqueueJson(
+			"""
+			{
+			  "id": "00000000-0000-0000-0000-000000000301",
+			  "email": "ada@example.com",
+			  "isDemo": false,
+			  "createdAt": "2026-07-01T10:15:30Z"
+			}
+			""".trimIndent(),
+		)
+		server.enqueueJson(
+			"""
+			{
+			  "id": "00000000-0000-0000-0000-000000000301",
+			  "email": "ada@example.com",
+			  "passwordHash": "hash",
+			  "isDemo": false,
+			  "createdAt": "2026-07-01T10:15:30Z"
+			}
+			""".trimIndent(),
+		)
+		server.enqueueJson(
+			"""
+			[
+			  {
+			    "id": "00000000-0000-0000-0000-000000000401",
+			    "destination": "Vienna",
+			    "startDate": "2026-07-10",
+			    "endDate": "2026-07-11"
+			  }
+			]
+			""".trimIndent(),
+		)
+		server.enqueueJson(tripJson())
+		server.enqueueJson(tripJson())
+		server.enqueueNoContent()
+		server.enqueueJson(activityJson("Updated activity", isIndoor = true))
+		server.enqueueNoContent()
+	}
+
+	private fun exercisePersistenceClient(
+		server: RecordingHttpServer,
+		ids: PersistenceIds,
+	): PersistenceResult {
+		val client = HttpPersistenceClient(WebClient.builder(), server.baseUrl)
+
+		val traveler = client.createTraveler(TravelerCreateRequest("ada@example.com", "hash", isDemo = false))
+		val authRecord = client.findTravelerAuthRecordByEmail("ada@example.com")
+		val summaries = client.listTrips(ids.travelerId)
+		val savedTrip = client.saveTrip(ids.travelerId, trip())
+		val fetchedTrip = client.getTrip(ids.travelerId, ids.tripId)
+		client.deleteTrip(ids.travelerId, ids.tripId)
+		val updatedActivity = client.updateActivity(
+			ids.tripId,
+			ids.dayId,
+			ids.activityId,
+			activity("Updated activity", isIndoor = true),
+		)
+		client.deleteActivity(ids.tripId, ids.dayId, ids.activityId)
+
+		return PersistenceResult(
+			travelerId = traveler.id,
+			passwordHash = authRecord.passwordHash,
+			summaryDestination = summaries.single().destination,
+			savedTrip = savedTrip,
+			fetchedTrip = fetchedTrip,
+			updatedActivity = updatedActivity,
+		)
+	}
+
+	private fun assertPersistenceResponses(ids: PersistenceIds, result: PersistenceResult) {
+		assertEquals(ids.travelerId, result.travelerId)
+		assertEquals("hash", result.passwordHash)
+		assertEquals("Vienna", result.summaryDestination)
+		assertEquals("Vienna", result.savedTrip.destination)
+		assertEquals("Vienna", result.fetchedTrip.destination)
+		assertEquals("Updated activity", result.updatedActivity.title)
+	}
+
+	private fun assertPersistenceRequests(ids: PersistenceIds, requests: List<RecordedRequest>) {
+		assertTravelerRequests(requests)
+		assertTripRequests(ids, requests)
+		assertActivityRequests(ids, requests)
+	}
+
+	private fun assertTravelerRequests(requests: List<RecordedRequest>) {
+		assertEquals("POST", requests[0].method)
+		assertEquals("/travelers", requests[0].path)
+		assertEquals("ada@example.com", JsonPath.read(requests[0].body, "$.email"))
+		assertFalse(JsonPath.read<Boolean>(requests[0].body, "$.isDemo"))
+
+		assertEquals("GET", requests[1].method)
+		assertEquals("/travelers/auth-record", requests[1].path)
+		assertEquals("email=ada@example.com", requests[1].query)
+	}
+
+	private fun assertTripRequests(ids: PersistenceIds, requests: List<RecordedRequest>) {
+		assertEquals("GET", requests[2].method)
+		assertEquals("/trips", requests[2].path)
+		assertEquals("travelerId=${ids.travelerId}", requests[2].query)
+
+		assertEquals("POST", requests[3].method)
+		assertEquals("/trips", requests[3].path)
+		assertEquals("travelerId=${ids.travelerId}", requests[3].query)
+		assertEquals("Vienna", JsonPath.read(requests[3].body, "$.destination"))
+
+		assertEquals("GET", requests[4].method)
+		assertEquals("/trips/${ids.tripId}", requests[4].path)
+		assertEquals("travelerId=${ids.travelerId}", requests[4].query)
+
+		assertEquals("DELETE", requests[5].method)
+		assertEquals("/trips/${ids.tripId}", requests[5].path)
+		assertEquals("travelerId=${ids.travelerId}", requests[5].query)
+	}
+
+	private fun assertActivityRequests(ids: PersistenceIds, requests: List<RecordedRequest>) {
+		val activityPath = "/trips/${ids.tripId}/days/${ids.dayId}/activities/${ids.activityId}"
+
+		assertEquals("PUT", requests[6].method)
+		assertEquals(activityPath, requests[6].path)
+		assertTrue(JsonPath.read<Boolean>(requests[6].body, "$.isIndoor"))
+
+		assertEquals("DELETE", requests[7].method)
+		assertEquals(activityPath, requests[7].path)
+	}
+
+	private data class PersistenceIds(
+		val travelerId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000301"),
+		val tripId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000401"),
+		val dayId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000101"),
+		val activityId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000201"),
+	)
+
+	private data class PersistenceResult(
+		val travelerId: UUID,
+		val passwordHash: String,
+		val summaryDestination: String,
+		val savedTrip: Trip,
+		val fetchedTrip: Trip,
+		val updatedActivity: Activity,
+	)
 
 	private fun trip(schedule: Schedule = Schedule(listOf(day(listOf(activity("Museum visit", isIndoor = true)))))): Trip =
 		Trip(
@@ -308,7 +364,8 @@ private class RecordingHttpServer : AutoCloseable {
 			),
 		)
 
-		val response = responses.removeFirstOrNull() ?: StubResponse(500, """{"error":"no response queued"}""", "application/json")
+		val response = responses.removeFirstOrNull()
+			?: StubResponse(500, """{"error":"no response queued"}""", "application/json")
 		exchange.responseHeaders.add("Content-Type", response.contentType)
 		val bytes = response.body.toByteArray(Charsets.UTF_8)
 		if (response.status == 204) {
