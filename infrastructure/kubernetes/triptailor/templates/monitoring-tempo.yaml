@@ -1,0 +1,127 @@
+{{- if .Values.monitoring.enabled }}
+{{- if .Values.monitoring.tempo.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tempo-data
+  labels:
+    app.kubernetes.io/component: tempo
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.monitoring.tempo.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.tempo.persistence.size }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "triptailor.fullname" . }}-tempo
+  labels:
+    app.kubernetes.io/component: tempo
+    {{- include "triptailor.labels" . | nindent 4 }}
+data:
+  # Loaded from the single source of truth shared with docker-compose. See
+  # files/monitoring/ in this chart.
+  tempo.yaml: |-
+{{ .Files.Get "files/monitoring/tempo/tempo.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.monitoring.tempo.service.name }}
+  labels:
+    app.kubernetes.io/component: tempo
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3200
+      targetPort: http
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+  selector:
+    app.kubernetes.io/component: tempo
+    {{- include "triptailor.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.monitoring.tempo.service.name }}
+  labels:
+    app.kubernetes.io/component: tempo
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: tempo
+      {{- include "triptailor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: tempo
+        {{- include "triptailor.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Roll the pod whenever the tempo config changes.
+        checksum/config: {{ .Files.Get "files/monitoring/tempo/tempo.yaml" | sha256sum }}
+    spec:
+      {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: tempo
+          image: "{{ .Values.monitoring.tempo.image.repository }}:{{ .Values.monitoring.tempo.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "-config.file=/etc/tempo/tempo.yaml"
+          ports:
+            - name: http
+              containerPort: 3200
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo
+            - name: data
+              mountPath: /tmp/tempo
+          resources:
+            {{- toYaml .Values.monitoring.tempo.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "triptailor.fullname" . }}-tempo
+        - name: data
+          {{- if .Values.monitoring.tempo.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: tempo-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }}

@@ -16,7 +16,31 @@ import {
   useLogout,
   useRefineOptions,
 } from "@refinedev/core";
-import { LogOutIcon } from "lucide-react";
+import { ActivityIcon, GaugeIcon, LogOutIcon } from "lucide-react";
+
+// Monitoring UIs served by the gateway under stable relative paths, so the same
+// links work in local Docker Compose (localhost:3000) and on the Azure VM.
+function MonitoringLinks({ className }: { className?: string }) {
+  const linkClass = cn(
+    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5",
+    "text-sm text-muted-foreground",
+    "hover:text-foreground hover:bg-accent",
+    "transition-colors"
+  );
+
+  return (
+    <div className={cn("flex items-center gap-1", className)}>
+      <a href="/grafana/" target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <ActivityIcon className="h-4 w-4" />
+        <span className="hidden sm:inline">Grafana</span>
+      </a>
+      <a href="/prometheus/" target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <GaugeIcon className="h-4 w-4" />
+        <span className="hidden sm:inline">Prometheus</span>
+      </a>
+    </div>
+  );
+}
 
 export const Header = () => {
   const { isMobile } = useSidebar();
@@ -52,6 +76,7 @@ function DesktopHeader() {
         })}
       />
       <div className="flex items-center gap-2">
+        <MonitoringLinks />
         <ThemeToggle />
         <UserDropdown />
       </div>
@@ -125,7 +150,10 @@ function MobileHeader() {
         </h2>
       </div>
 
-      <ThemeToggle className={cn("h-8", "w-8")} />
+      <div className="flex items-center gap-1 pr-1">
+        <MonitoringLinks />
+        <ThemeToggle className={cn("h-8", "w-8")} />
+      </div>
     </header>
   );
 }
