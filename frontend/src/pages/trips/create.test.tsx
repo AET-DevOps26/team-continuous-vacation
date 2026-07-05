@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TripCreate } from "./create";
@@ -24,6 +24,13 @@ vi.mock("@/components/ui/calendar", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  // Pin "today" before the date the mock Calendar selects so it is not in the past.
+  vi.setSystemTime(new Date("2026-06-01T12:00:00"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("TripCreate", () => {
