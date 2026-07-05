@@ -34,6 +34,9 @@ scrape_configs:
     static_configs:
       - targets: ["travel-context-service:8090"]
 
+  # Prometheus serves under a route prefix (--web.route-prefix=/prometheus/), so
+  # its own metrics and API move beneath that path in every environment.
   - job_name: prometheus
+    metrics_path: /prometheus/metrics
     static_configs:
       - targets: ["prometheus:9090"]

@@ -70,6 +70,10 @@ metadata:
     {{- include "triptailor.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  # Single pod backed by a ReadWriteOnce PVC: the new pod cannot mount the
+  # volume until the old one releases it, so a rolling update deadlocks.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: grafana
