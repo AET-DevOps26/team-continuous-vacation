@@ -187,6 +187,17 @@ ingress:
     annotations:
       nginx.ingress.kubernetes.io/use-regex: "true"
       nginx.ingress.kubernetes.io/rewrite-target: /$2
+  # Expose Grafana/Prometheus under subpaths on the same host. Requires
+  # monitoring.enabled (and grafana.enabled) so the backing service exists.
+  # The monitoring pods are reconfigured to serve from these prefixes.
+  grafana:
+    enabled: true
+    path: /grafana
+    pathType: Prefix
+  prometheus:
+    enabled: true
+    path: /prometheus
+    pathType: Prefix
   hosts:
     - host: triptailor.local
       paths:

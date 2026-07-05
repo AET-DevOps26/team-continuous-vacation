@@ -99,18 +99,30 @@ spec:
               value: Admin
             - name: GF_AUTH_DISABLE_LOGIN_FORM
               value: "true"
+            {{- if and .Values.ingress.enabled .Values.ingress.grafana.enabled }}
+            # Serve from the ingress subpath. Grafana then prefixes all its
+            # routes (incl. /api/health) beneath this path.
+            - name: GF_SERVER_ROOT_URL
+              value: "%(protocol)s://%(domain)s{{ .Values.ingress.grafana.path }}/"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+            {{- with (index .Values.ingress.hosts 0) }}
+            - name: GF_SERVER_DOMAIN
+              value: {{ .host | quote }}
+            {{- end }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 3000
           readinessProbe:
             httpGet:
-              path: /api/health
+              path: {{ if and .Values.ingress.enabled .Values.ingress.grafana.enabled }}{{ .Values.ingress.grafana.path }}{{ end }}/api/health
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/health
+              path: {{ if and .Values.ingress.enabled .Values.ingress.grafana.enabled }}{{ .Values.ingress.grafana.path }}{{ end }}/api/health
               port: http
             initialDelaySeconds: 30
             periodSeconds: 20
