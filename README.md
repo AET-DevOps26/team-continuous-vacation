@@ -51,6 +51,23 @@ TripTailor runs as five application services plus Postgres:
 
 In Docker Compose and Kubernetes, the gateway exposes the frontend and routes `/api/*` to the backend. Persistence, GenAI, travel-context, and Postgres are internal implementation services.
 
+### Local Ports (Docker Compose)
+
+Running `docker compose up --build` publishes the following host ports. Services listed as *internal only* are reachable through the gateway or by other containers on the Compose network, not from the host.
+
+| Service | Host Port | URL / Notes |
+| --- | --- | --- |
+| Gateway (NGINX) | `3000` | http://localhost:3000 — main entry point; serves frontend and proxies `/api/*` to the backend. |
+| Grafana | `3001` | http://localhost:3001 — dashboards and trace exploration (anonymous admin). |
+| Tempo | `3200`, `4317`, `4318` | Trace query API (`3200`), OTLP gRPC (`4317`), OTLP HTTP (`4318`). |
+| Prometheus | `9090` | http://localhost:9090 — metrics and alerts. |
+| Travel Context Service | `8090` | http://localhost:8090 — internal enrichment service, also exposed for local debugging. |
+| PostgreSQL | `5433` | Host `5433` → container `5432` (user `tripuser`, db `triptailor`). |
+| Frontend | — | Internal only; reach via the gateway on `3000`. |
+| Backend API | — | Internal only (`8080`); reach via the gateway `/api/*`. |
+| Persistence Service | — | Internal only (`8081`). |
+| GenAI Service | — | Internal only (`8000`). |
+
 ## Architecture
 
 TripTailor uses independently deployable services with explicit HTTP contracts. The browser loads the React application through the NGINX gateway and sends all application requests to the public Spring Boot backend. That backend is the system's security and orchestration boundary: it authenticates travelers with signed JWTs, validates public requests, coordinates trip generation, and prevents clients from calling internal services directly.
