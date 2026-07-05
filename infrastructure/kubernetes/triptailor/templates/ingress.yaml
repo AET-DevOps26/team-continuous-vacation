@@ -58,6 +58,24 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          {{- if and $.Values.monitoring.enabled $.Values.monitoring.grafana.enabled $.Values.ingress.grafana.enabled }}
+          - path: {{ $.Values.ingress.grafana.path }}
+            pathType: {{ $.Values.ingress.grafana.pathType }}
+            backend:
+              service:
+                name: {{ $.Values.monitoring.grafana.service.name }}
+                port:
+                  number: {{ $.Values.monitoring.grafana.service.port }}
+          {{- end }}
+          {{- if and $.Values.monitoring.enabled $.Values.ingress.prometheus.enabled }}
+          - path: {{ $.Values.ingress.prometheus.path }}
+            pathType: {{ $.Values.ingress.prometheus.pathType }}
+            backend:
+              service:
+                name: prometheus
+                port:
+                  number: 9090
+          {{- end }}
           {{- range .paths }}
           - path: {{ .path }}
             pathType: {{ .pathType }}
