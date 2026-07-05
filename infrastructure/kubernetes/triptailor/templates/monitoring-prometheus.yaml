@@ -59,6 +59,10 @@ metadata:
     {{- include "triptailor.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  # Single pod backed by a ReadWriteOnce PVC: the new pod cannot mount the
+  # volume until the old one releases it, so a rolling update deadlocks.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: prometheus
@@ -86,24 +90,25 @@ spec:
             - "--config.file=/etc/prometheus/prometheus.yml"
             - "--storage.tsdb.path=/prometheus"
             - "--storage.tsdb.retention.time={{ .Values.monitoring.prometheus.retention }}"
-            {{- if and .Values.ingress.enabled .Values.ingress.prometheus.enabled }}
-            # Serve under the ingress subpath. This also moves all internal
-            # routes (incl. /-/ready, /-/healthy) beneath the prefix.
+            # Always serve under this route prefix so the shared scrape config
+            # (files/monitoring/prometheus.yml) and the Grafana datasource resolve
+            # identically in every environment (docker-compose, local + AET Helm).
+            # This moves ALL routes (incl. /metrics, /api, /-/ready, /-/healthy)
+            # beneath the prefix. Keep in sync with files/monitoring/*.
             - "--web.external-url={{ .Values.ingress.prometheus.path }}/"
             - "--web.route-prefix={{ .Values.ingress.prometheus.path }}/"
-            {{- end }}
           ports:
             - name: http
               containerPort: 9090
           readinessProbe:
             httpGet:
-              path: {{ if and .Values.ingress.enabled .Values.ingress.prometheus.enabled }}{{ .Values.ingress.prometheus.path }}{{ end }}/-/ready
+              path: {{ .Values.ingress.prometheus.path }}/-/ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: {{ if and .Values.ingress.enabled .Values.ingress.prometheus.enabled }}{{ .Values.ingress.prometheus.path }}{{ end }}/-/healthy
+              path: {{ .Values.ingress.prometheus.path }}/-/healthy
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
