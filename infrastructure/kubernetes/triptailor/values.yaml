@@ -6,7 +6,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 tracing:
-  enabled: false
+  enabled: true
   otlpEndpoint: http://tempo:4318/v1/traces
   samplingProbability: "1.0"
 
@@ -158,6 +158,23 @@ monitoring:
         memory: 128Mi
       limits:
         memory: 256Mi
+  tempo:
+    enabled: true
+    image:
+      repository: grafana/tempo
+      tag: 2.9.0
+    service:
+      name: tempo
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClassName: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
 
 ingress:
   enabled: false
