@@ -1,4 +1,23 @@
 {{- if and .Values.monitoring.enabled .Values.monitoring.grafana.enabled }}
+{{- if .Values.monitoring.grafana.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  labels:
+    app.kubernetes.io/component: grafana
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.monitoring.grafana.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.grafana.persistence.size }}
+---
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -65,6 +84,10 @@ spec:
         checksum/dashboards: {{ .Files.Get "files/monitoring/grafana/dashboards/triptailor-services.json" | sha256sum }}
     spec:
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
       containers:
         - name: grafana
           image: "{{ .Values.monitoring.grafana.image.repository }}:{{ .Values.monitoring.grafana.image.tag }}"
@@ -92,6 +115,8 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 20
           volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
             - name: grafana-provisioning
               mountPath: /etc/grafana/provisioning/datasources/prometheus.yaml
               subPath: prometheus.yaml
@@ -111,6 +136,13 @@ spec:
           resources:
             {{- toYaml .Values.monitoring.grafana.resources | nindent 12 }}
       volumes:
+        - name: data
+          {{- if .Values.monitoring.grafana.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: grafana-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
         - name: grafana-provisioning
           configMap:
             name: {{ include "triptailor.fullname" . }}-grafana-provisioning
