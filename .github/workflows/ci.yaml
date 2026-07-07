@@ -174,9 +174,6 @@ jobs:
     env:
       COVERAGE_THRESHOLD: "80"
       NEEDS_JSON: ${{ toJson(needs) }}
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
-      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -222,18 +219,6 @@ jobs:
                 body,
               });
             }
-      - name: Prepare SonarQube Cloud coverage
-        if: env.SONAR_TOKEN != '' && env.SONAR_ORGANIZATION != '' && env.SONAR_PROJECT_KEY != ''
-        run: node scripts/prepare-sonar-coverage.mjs
-      - name: Run SonarQube Cloud scan
-        if: env.SONAR_TOKEN != '' && env.SONAR_ORGANIZATION != '' && env.SONAR_PROJECT_KEY != ''
-        uses: SonarSource/sonarqube-scan-action@v8.2.0
-        with:
-          args: >
-            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       - name: Verify coverage gate
         run: node scripts/coverage-report.mjs --check
 
