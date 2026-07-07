@@ -1,4 +1,23 @@
 {{- if .Values.monitoring.enabled }}
+{{- if .Values.monitoring.prometheus.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  labels:
+    app.kubernetes.io/component: prometheus
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.monitoring.prometheus.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.prometheus.persistence.size }}
+---
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -40,6 +59,10 @@ metadata:
     {{- include "triptailor.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  # Single pod backed by a ReadWriteOnce PVC: the new pod cannot mount the
+  # volume until the old one releases it, so a rolling update deadlocks.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: prometheus
@@ -55,34 +78,56 @@ spec:
         checksum/rules: {{ .Files.Get "files/monitoring/prometheus/alert.rules.yml" | sha256sum }}
     spec:
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
       containers:
         - name: prometheus
           image: "{{ .Values.monitoring.prometheus.image.repository }}:{{ .Values.monitoring.prometheus.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time={{ .Values.monitoring.prometheus.retention }}"
+            # Always serve under this route prefix so the shared scrape config
+            # (files/monitoring/prometheus.yml) and the Grafana datasource resolve
+            # identically in every environment (docker-compose, local + AET Helm).
+            # This moves ALL routes (incl. /metrics, /api, /-/ready, /-/healthy)
+            # beneath the prefix. Keep in sync with files/monitoring/*.
+            - "--web.external-url={{ .Values.ingress.prometheus.path }}/"
+            - "--web.route-prefix={{ .Values.ingress.prometheus.path }}/"
           ports:
             - name: http
               containerPort: 9090
           readinessProbe:
             httpGet:
-              path: /-/ready
+              path: {{ .Values.ingress.prometheus.path }}/-/ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /-/healthy
+              path: {{ .Values.ingress.prometheus.path }}/-/healthy
               port: http
             initialDelaySeconds: 15
             periodSeconds: 20
           volumeMounts:
             - name: config
               mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
           resources:
             {{- toYaml .Values.monitoring.prometheus.resources | nindent 12 }}
       volumes:
         - name: config
           configMap:
             name: {{ include "triptailor.fullname" . }}-prometheus
+        - name: data
+          {{- if .Values.monitoring.prometheus.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: prometheus-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
 {{- end }}

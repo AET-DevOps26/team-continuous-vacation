@@ -6,7 +6,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 tracing:
-  enabled: false
+  enabled: true
   otlpEndpoint: http://tempo:4318/v1/traces
   samplingProbability: "1.0"
 
@@ -129,7 +129,17 @@ monitoring:
     image:
       repository: prom/prometheus
       tag: v3.11.0
-    resources: {}
+    retention: 7d
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClassName: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
   grafana:
     enabled: true
     image:
@@ -138,7 +148,33 @@ monitoring:
     service:
       name: grafana
       port: 3000
-    resources: {}
+    persistence:
+      enabled: true
+      size: 1Gi
+      storageClassName: ""
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+  tempo:
+    enabled: true
+    image:
+      repository: grafana/tempo
+      tag: 2.9.0
+    service:
+      name: tempo
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClassName: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
 
 ingress:
   enabled: false
@@ -151,6 +187,17 @@ ingress:
     annotations:
       nginx.ingress.kubernetes.io/use-regex: "true"
       nginx.ingress.kubernetes.io/rewrite-target: /$2
+  # Expose Grafana/Prometheus under subpaths on the same host. Requires
+  # monitoring.enabled (and grafana.enabled) so the backing service exists.
+  # The monitoring pods are reconfigured to serve from these prefixes.
+  grafana:
+    enabled: true
+    path: /grafana
+    pathType: Prefix
+  prometheus:
+    enabled: true
+    path: /prometheus
+    pathType: Prefix
   hosts:
     - host: triptailor.local
       paths:

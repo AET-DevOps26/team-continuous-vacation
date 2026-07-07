@@ -167,6 +167,13 @@ jobs:
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/genai-service --timeout=180s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/backend --timeout=180s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/frontend --timeout=180s
+          # Monitoring pods use Recreate + RWO PVCs; catch a stuck rollout here
+          # instead of silently serving the old (misconfigured) pod.
+          for d in prometheus grafana tempo; do
+            if kubectl -n "${AET_NAMESPACE}" get deploy/"$d" >/dev/null 2>&1; then
+              kubectl -n "${AET_NAMESPACE}" rollout status deploy/"$d" --timeout=180s
+            fi
+          done
 
       - name: Show deployment status
         run: kubectl -n "${AET_NAMESPACE}" get pods,svc,ingress

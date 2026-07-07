@@ -9,6 +9,8 @@ services:
     depends_on:
       - frontend
       - backend
+      - grafana
+      - prometheus
 
   db:
     image: postgres:17-alpine
@@ -108,10 +110,6 @@ services:
     container_name: triptailor-travel-context
     ports:
       - "8090:8090"
-    env_file:
-      - path: ./travel-context-service/.env.example
-      - path: ./travel-context-service/.env
-        required: false
     environment:
       - OTEL_SERVICE_NAME=travel-context-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
@@ -121,6 +119,13 @@ services:
       - OTEL_PROPAGATORS=tracecontext,baggage
       - OTEL_TRACES_SAMPLER=parentbased_traceidratio
       - OTEL_TRACES_SAMPLER_ARG=1.0
+    env_file:
+      - path: ./travel-context-service/.env.example
+      - path: ./travel-context-service/.env
+        required: false
+    depends_on:
+      tempo:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
       interval: 10s
@@ -147,8 +152,14 @@ services:
     container_name: triptailor-prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      # Serve under /prometheus/ so the gateway can expose it as a subpath.
+      - "--web.external-url=/prometheus/"
+      - "--web.route-prefix=/prometheus/"
     volumes:
       - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
     ports:
       - "9090:9090"
     depends_on:
@@ -166,7 +177,7 @@ services:
       - "4317:4317"
       - "4318:4318"
     volumes:
-      - ./infrastructure/observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - ./monitoring/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
 
   grafana:
     image: grafana/grafana:12.3.0
@@ -177,6 +188,9 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_DISABLE_LOGIN_FORM=true
+      # Serve under /grafana/ so the gateway can expose it as a subpath.
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:3000/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -186,4 +200,6 @@ services:
 
 volumes:
   pgdata:
+    driver: local
+  prometheus-data:
     driver: local
