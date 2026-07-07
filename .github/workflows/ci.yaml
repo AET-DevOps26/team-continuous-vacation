@@ -225,7 +225,23 @@ jobs:
   verify-docker-compose:
     needs: [coverage-report]
     runs-on: ubuntu-latest
+    env:
+      COMPOSE_PROJECT_NAME: triptailor-ci
     steps:
       - uses: actions/checkout@v5
+      - name: Validate Docker Compose config
+        run: docker compose config --quiet
       - name: Build Docker images
         run: docker compose build
+      - name: Start Docker Compose stack
+        run: docker compose up --detach --wait --wait-timeout 240
+      - name: Smoke test Docker Compose stack
+        run: bash scripts/docker-compose-smoke.sh
+      - name: Dump Docker Compose logs
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color --tail=200
+      - name: Stop Docker Compose stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
