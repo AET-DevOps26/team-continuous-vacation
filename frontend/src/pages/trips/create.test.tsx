@@ -9,6 +9,21 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
 }));
 
+const testDate = vi.hoisted(() => {
+  const selectedDate = new Date();
+  selectedDate.setDate(selectedDate.getDate() + 7);
+  selectedDate.setHours(12, 0, 0, 0);
+
+  return {
+    selectedDate,
+    selectedDateValue: [
+      selectedDate.getFullYear(),
+      String(selectedDate.getMonth() + 1).padStart(2, "0"),
+      String(selectedDate.getDate()).padStart(2, "0"),
+    ].join("-"),
+  };
+});
+
 vi.mock("@refinedev/core", () => ({
   useCreate: () => ({ mutate: mocks.createMutate }),
   useNavigation: () => ({ show: mocks.show, list: mocks.list }),
@@ -16,8 +31,8 @@ vi.mock("@refinedev/core", () => ({
 
 vi.mock("@/components/ui/calendar", () => ({
   Calendar: ({ onSelect }: { onSelect: (date: Date) => void }) => (
-    <button type="button" onClick={() => onSelect(new Date("2026-07-01T00:00:00"))}>
-      Select July 1
+    <button type="button" onClick={() => onSelect(testDate.selectedDate)}>
+      Select trip date
     </button>
   ),
 }));
@@ -45,9 +60,9 @@ describe("TripCreate", () => {
 
     await user.type(screen.getByPlaceholderText("e.g. Munich, Beach vacation, Tokyo"), "Munich");
     await user.click(screen.getByRole("button", { name: "Start Date" }));
-    await user.click(await screen.findByRole("button", { name: "Select July 1" }));
+    await user.click(await screen.findByRole("button", { name: "Select trip date" }));
     await user.click(screen.getByRole("button", { name: "End Date" }));
-    await user.click(await screen.findByRole("button", { name: "Select July 1" }));
+    await user.click(await screen.findByRole("button", { name: "Select trip date" }));
     await user.click(screen.getByRole("button", { name: "Sporty and active" }));
     await user.click(screen.getByRole("button", { name: "Generate Trip" }));
 
@@ -57,8 +72,8 @@ describe("TripCreate", () => {
           resource: "trips",
           values: {
             destination: "Munich",
-            startDate: "2026-07-01",
-            endDate: "2026-07-01",
+            startDate: testDate.selectedDateValue,
+            endDate: testDate.selectedDateValue,
             vibe: "Sporty and active",
           },
         },

@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 jobs:
   build-frontend:
     runs-on: ubuntu-latest
@@ -29,6 +34,7 @@ jobs:
       - name: Generate coverage report
         run: npm run test:coverage
       - name: Upload frontend coverage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
@@ -55,6 +61,7 @@ jobs:
       - name: Build and Test with Gradle
         run: ./gradlew build
       - name: Upload backend coverage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-coverage
@@ -79,6 +86,7 @@ jobs:
       - name: Build and Test with Gradle
         run: ./gradlew build
       - name: Upload persistence coverage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: persistence-service-coverage
@@ -111,8 +119,9 @@ jobs:
         run: mypy app
       - name: Test with coverage
         run: |
-          pytest --verbose --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
+          pytest --verbose --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=80
       - name: Upload GenAI coverage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: genai-service-coverage
@@ -147,8 +156,9 @@ jobs:
         run: mypy app
       - name: Test with coverage
         run: |
-          pytest --verbose --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
+          pytest --verbose --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=80
       - name: Upload travel context coverage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: travel-context-service-coverage
@@ -157,10 +167,81 @@ jobs:
             travel-context-service/htmlcov/
           if-no-files-found: error
 
-  verify-docker-compose:
+  coverage-report:
     needs: [build-frontend, build-backend, build-genai, build-persistence-service, build-travel-context]
+    if: always()
     runs-on: ubuntu-latest
+    env:
+      COVERAGE_THRESHOLD: "80"
+      NEEDS_JSON: ${{ toJson(needs) }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: .coverage-artifacts
+      - name: Create coverage summary
+        run: node scripts/coverage-report.mjs
+      - name: Publish PR coverage comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const marker = "<!-- triptailor-coverage-report -->";
+            const body = fs.readFileSync("coverage-summary.md", "utf8");
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user?.type === "Bot" && comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
+      - name: Verify coverage gate
+        run: node scripts/coverage-report.mjs --check
+
+  verify-docker-compose:
+    needs: [coverage-report]
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE_PROJECT_NAME: triptailor-ci
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate Docker Compose config
+        run: docker compose config --quiet
       - name: Build Docker images
         run: docker compose build
+      - name: Start Docker Compose stack
+        run: docker compose up --detach --wait --wait-timeout 240
+      - name: Smoke test Docker Compose stack
+        run: bash scripts/docker-compose-smoke.sh
+      - name: Dump Docker Compose logs
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color --tail=200
+      - name: Stop Docker Compose stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
