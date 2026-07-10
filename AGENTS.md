@@ -2,11 +2,14 @@
 
 ## Project Structure & Module Organization
 
-- `backend/`: Kotlin Spring Boot service. Application code lives in `src/main/kotlin/com/vacation/app`, resources in `src/main/resources`, and tests in `src/test/kotlin`.
+- `backend/`: Kotlin Spring Boot backend-for-frontend. Application code lives in `src/main/kotlin/com/vacation/app`, resources in `src/main/resources`, and tests in `src/test/kotlin`. Owns auth, JWT validation, and trip orchestration.
+- `persistence-service/`: Kotlin Spring Boot internal database access layer for travelers, trips, days, activities, and tags. Same module layout as `backend/`.
+- `genai-service/`: Python FastAPI service that prompts the configured LLM and validates structured itinerary output. App code in `app/`, tests in `tests/`.
+- `travel-context-service/`: Python FastAPI enrichment service for geocoding, events, places, weather, and ranking. App code in `app/`, tests in `tests/`.
 - `frontend/`: React 19 + Vite + Refine app. Pages are in `src/pages`, reusable UI in `src/components`, providers in `src/providers`, and helpers in `src/lib`.
-- `api-specification/`: OpenAPI YAML files for frontend, persistence, and GenAI boundaries.
+- `api-specification/`: OpenAPI YAML files for frontend, persistence, GenAI, and travel-context boundaries.
 - `diagrams/`: PlantUML architecture and flow diagrams.
-- `docker-compose.yml`: Local multi-service setup for Postgres, backend, and frontend.
+- `docker-compose.yml`: Local multi-service setup for Postgres, backend, persistence-service, genai-service, travel-context-service, and frontend.
 
 ## Build, Test, and Development Commands
 
@@ -46,7 +49,7 @@ Frontend code uses TypeScript and React function components. Name components in 
 
 ## Testing Guidelines
 
-Backend tests use JUnit 5 through Gradle; place tests under `backend/src/test/kotlin` and prefer focused Spring tests for controller/service behavior. The frontend currently has lint and build validation but no dedicated test runner configured. Run `npm run lint`, `npm run build`, and `./gradlew build` before PRs that touch both modules.
+Backend and persistence-service tests use JUnit 5 through Gradle; place tests under `<module>/src/test/kotlin` and prefer focused Spring tests for controller/service behavior. The frontend uses Vitest and React Testing Library (`frontend/vitest.config.ts`); run `npm run test` or `npm run test:coverage`, with tests colocated as `*.test.tsx`/`*.test.ts` next to the code they cover. Python services (`genai-service/`, `travel-context-service/`) use pytest under `tests/`. Run `npm run lint`, `npm run test`, and `npm run build` in `frontend/`, and `./gradlew build` in the Kotlin services, before PRs that touch multiple modules.
 
 ## Commit & Pull Request Guidelines
 

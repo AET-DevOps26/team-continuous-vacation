@@ -149,6 +149,44 @@ Coverage reports are uploaded as workflow artifacts. Deployment and container-im
 
 Each Kotlin service keeps a reviewed `detekt-baseline.xml` for findings that predate enforcement. The baseline records those findings while Detekt fails the build for every new violation. Baselines should only be regenerated after the recorded findings have been reviewed or fixed.
 
+## Monitoring & Observability
+
+Prometheus and Grafana configuration has a single source of truth in
+`infrastructure/kubernetes/triptailor/files/monitoring/` (see its `README.md`), shared by
+`docker-compose.yml` (via the repo-root `monitoring` symlink) and the Helm chart. All
+runtime services expose metrics: Spring services at `/actuator/prometheus`, FastAPI
+services at `/metrics`. Alert rules live in
+`infrastructure/kubernetes/triptailor/files/monitoring/prometheus/alert.rules.yml`
+(service-down, request-failure-rate, and high-latency alerts). Exported Grafana
+dashboards are checked in at
+`infrastructure/observability/grafana/dashboards/triptailor-services.json`.
+
+## Deployment
+
+The system deploys to two environments:
+
+- **Rancher / AET (course infrastructure):** Kubernetes via the Helm chart in
+  `infrastructure/kubernetes/triptailor/`, deployed automatically on merge to `main`
+  by `.github/workflows/images.yaml`. Live instance:
+  `https://team-continuous-vacation.stud.k8s.aet.cit.tum.de/`. See
+  `infrastructure/kubernetes/README.md` for details.
+- **Azure (cloud option):** a single VM provisioned by Terraform
+  (`infrastructure/terraform/`) and configured by Ansible
+  (`infrastructure/ansible/playbook.yml`), running the same services via Docker
+  Compose. Deployed by `.github/workflows/azure-vm-deploy.yaml`.
+
+## Student Responsibilities
+
+| Team Member | Primary Subsystem |
+| --- | --- |
+| Florian | Backend, Persistence Service, Tracing |
+| Jonas | Frontend, Weather Travel Context Service, Prometheus |
+| Thomas | GenAI Service, Travel Context Service, Grafana |
+
+Subsystem ownership does not imply isolated work — all members collaborate across
+boundaries for integration, deployment, and debugging (see `AGENTS.md` for module
+layout and conventions).
+
 ## Source Of Truth And Generated Files
 
 - OpenAPI contracts live in `api-specification/`. The current persistence contract file is intentionally named `persistance.yaml` for compatibility with existing build scripts.
