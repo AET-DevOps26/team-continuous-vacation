@@ -34,6 +34,10 @@ env:
   AZURE_VM_SIZE: ${{ vars.AZURE_VM_SIZE || 'Standard_B2ats_v2' }}
   AZURE_VM_ADMIN_USERNAME: ${{ vars.AZURE_VM_ADMIN_USERNAME || 'tripadmin' }}
   AZURE_LLM_BASE_URL: ${{ vars.AZURE_LLM_BASE_URL || secrets.AZURE_LLM_BASE_URL }}
+  AZURE_MONTHLY_BUDGET_AMOUNT: ${{ vars.AZURE_MONTHLY_BUDGET_AMOUNT || '95' }}
+  AZURE_MONTHLY_BUDGET_START_DATE: ${{ vars.AZURE_MONTHLY_BUDGET_START_DATE || '2026-07-01T00:00:00Z' }}
+  AZURE_MONTHLY_BUDGET_END_DATE: ${{ vars.AZURE_MONTHLY_BUDGET_END_DATE || '2027-07-01T00:00:00Z' }}
+  AZURE_BUDGET_ALERT_EMAIL_ADDRESSES: ${{ vars.AZURE_BUDGET_ALERT_EMAIL_ADDRESSES || '' }}
 
 jobs:
   deploy:
@@ -92,7 +96,11 @@ jobs:
             -var="location=${AZURE_LOCATION}" \
             -var="vm_size=${AZURE_VM_SIZE}" \
             -var="admin_username=${AZURE_VM_ADMIN_USERNAME}" \
-            -var="ssh_public_key_path=$RUNNER_TEMP/ssh/triptailor.pub"
+            -var="ssh_public_key_path=$RUNNER_TEMP/ssh/triptailor.pub" \
+            -var="monthly_budget_amount=${AZURE_MONTHLY_BUDGET_AMOUNT}" \
+            -var="monthly_budget_start_date=${AZURE_MONTHLY_BUDGET_START_DATE}" \
+            -var="monthly_budget_end_date=${AZURE_MONTHLY_BUDGET_END_DATE}" \
+            -var="budget_alert_email_addresses=${AZURE_BUDGET_ALERT_EMAIL_ADDRESSES}"
 
       - name: Terraform apply
         working-directory: infrastructure/terraform

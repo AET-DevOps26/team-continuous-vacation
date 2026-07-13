@@ -73,6 +73,18 @@ az role assignment create \
   --scope "/subscriptions/$SUBSCRIPTION_ID"
 ```
 
+If you are moving to a new Azure account because the old account ran out of credit, do the following in the new account before running GitHub Actions:
+
+1. Select the new subscription with `az account set --subscription "<new-subscription-id>"`.
+2. Create a new app registration/service principal with the commands above, or reuse an existing one only if it belongs to the new tenant and subscription.
+3. Add the GitHub OIDC federated credential below. Keep the `subject` value aligned with the GitHub environment name `azure`.
+4. Create a new Terraform state resource group, storage account, and `tfstate` container in the new subscription.
+5. Update the `backend "azurerm"` block in `infrastructure/terraform/main.tf` if the new storage account or state resource group names differ from `triptailor-tfstate-rg` and `continousvacationstorage`.
+6. Grant `Storage Blob Data Contributor` on the state storage account to both your local user and the GitHub Actions service principal.
+7. Create or copy an SSH key pair for the VM. If the private key was exposed to the old account or old workflow runs, generate a fresh pair.
+8. Create or select the Azure OpenAI/Cognitive Services resource for `genai-service`, create a model deployment, and copy its endpoint and API key.
+9. In Cost Management, check the current credit balance. Set the monthly budget amount to `current balance - 5`; for example, use `95` if the new account has `100 USD` available.
+
 Add a federated credential for your repository and the `azure` GitHub environment used by `.github/workflows/azure-vm-deploy.yaml`.
 
 ```bash
@@ -91,19 +103,19 @@ If you also want to authenticate jobs that do not use a GitHub environment, add 
 Create a storage account and blob container for Terraform remote state. The storage account name must be globally unique and contain only lowercase letters and numbers.
 
 ```bash
-az group create --name triptailor-tfstate-rg --location westeurope
+az group create --name triptailor-tfstate-rg --location polandcentral
 
 az storage account create \
-  --name "continousvacationstorage" \
+  --name "triptfstate354f93b6" \
   --resource-group triptailor-tfstate-rg \
-  --location westeurope \
+  --location polandcentral \
   --sku Standard_LRS \
   --kind StorageV2 \
   --allow-blob-public-access false
 
 az storage container create \
   --name tfstate \
-  --account-name "continousvacationstorage" \
+  --account-name "triptfstate354f93b6" \
   --auth-mode login
 ```
 
@@ -111,7 +123,7 @@ Give your local Azure CLI user access to the Terraform state container. This is 
 
 ```bash
 STORAGE_SCOPE=$(az storage account show \
-  --name "continousvacationstorage" \
+  --name "triptfstate354f93b6" \
   --resource-group triptailor-tfstate-rg \
   --query id -o tsv)
 
@@ -128,7 +140,7 @@ Give the GitHub Actions service principal the same access to the Terraform state
 
 ```bash
 STORAGE_SCOPE=$(az storage account show \
-  --name "continousvacationstorage" \
+  --name "triptfstate354f93b6" \
   --resource-group triptailor-tfstate-rg \
   --query id -o tsv)
 
@@ -178,8 +190,39 @@ Add these optional repository variables if you want values different from the Te
 | `AZURE_VM_SIZE` | `Standard_B2ats_v2` |
 | `AZURE_VM_ADMIN_USERNAME` | `tripadmin` |
 | `AZURE_LLM_BASE_URL` | Azure OpenAI endpoint URL |
+| `AZURE_MONTHLY_BUDGET_AMOUNT` | `95` |
+| `AZURE_MONTHLY_BUDGET_START_DATE` | `2026-07-01T00:00:00Z` |
+| `AZURE_MONTHLY_BUDGET_END_DATE` | `2027-07-01T00:00:00Z` |
+| `AZURE_BUDGET_ALERT_EMAIL_ADDRESSES` | Empty, which disables budget alert creation |
 
 The default `Standard_B2ats_v2` in `polandcentral` is chosen because Azure reported smaller burstable sizes as unavailable for this student subscription in the checked EU regions, while `Standard_B2ats_v2` was available in `polandcentral`. If this SKU becomes unavailable, check available burstable sizes with `az vm list-skus --location polandcentral --size Standard_B --all --output table` and set `location`/`vm_size` in `terraform.tfvars` or the `AZURE_LOCATION`/`AZURE_VM_SIZE` GitHub repository variables to the cheapest available option.
+
+### Cost alert setup
+
+Terraform creates an Azure Cost Management monthly subscription budget when `AZURE_BUDGET_ALERT_EMAIL_ADDRESSES` is non-empty. It also creates an Azure Monitor action group named `triptailor-cost-alerts`.
+
+Azure budgets alert on cost thresholds, not on live remaining credit for every subscription type. To get an alert when roughly `5 USD` remains, set:
+
+```text
+AZURE_MONTHLY_BUDGET_AMOUNT = <current-credit-balance> - 5
+AZURE_BUDGET_ALERT_EMAIL_ADDRESSES = "person1@example.com,person2@example.com"
+```
+
+The budget sends both actual-cost and forecasted-cost notifications at `100%` of that amount. Cost Management data is delayed, usually by several hours, so keep the Azure spending limit enabled for student/free-credit subscriptions when possible. Microsoft also sends automatic credit alerts for Enterprise Agreement Azure Prepayment at 90% and 100%, but those credit alerts are not available on every Azure offer type.
+
+When the billing month changes, update `AZURE_MONTHLY_BUDGET_START_DATE` to the first day of the active billing month, for example `2026-08-01T00:00:00Z`. If the new account starts with a different credit amount, update `AZURE_MONTHLY_BUDGET_AMOUNT` before rerunning the deployment.
+
+### GitHub migration checklist
+
+In GitHub, update the `azure` environment or repository settings after the new Azure account is prepared:
+
+1. Replace `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` with values from the new account.
+2. Replace `AZURE_VM_SSH_PUBLIC_KEY` and `AZURE_VM_SSH_PRIVATE_KEY` if you generated a new VM key pair.
+3. Replace `AZURE_LLM_API_KEY` and `AZURE_LLM_BASE_URL` with the new Azure OpenAI resource values.
+4. Set `AZURE_BUDGET_ALERT_EMAIL_ADDRESSES` to the team recipients.
+5. Set `AZURE_MONTHLY_BUDGET_AMOUNT` to the new current credit balance minus `5`.
+6. Set `AZURE_MONTHLY_BUDGET_START_DATE` and `AZURE_MONTHLY_BUDGET_END_DATE`.
+7. Trigger `Deploy to Azure VM` manually with `terraform_action=apply`.
 
 ### Run the deployment
 

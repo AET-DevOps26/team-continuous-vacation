@@ -4,3 +4,13 @@ location            = "polandcentral"
 vm_size             = "Standard_B2ats_v2"
 admin_username      = "tripadmin"
 ssh_public_key_path = "~/.ssh/<ssh-key>.pub"
+
+# Set this to current Azure credits minus 5 USD, for example 95 for a 100 USD student credit.
+monthly_budget_amount = 95
+
+# Must be the first day of the active billing month.
+monthly_budget_start_date = "2026-07-01T00:00:00Z"
+monthly_budget_end_date   = "2027-07-01T00:00:00Z"
+
+# Comma-separated recipients. Leave empty to skip Azure budget alert creation.
+budget_alert_email_addresses = "dev1@example.com,dev2@example.com"
