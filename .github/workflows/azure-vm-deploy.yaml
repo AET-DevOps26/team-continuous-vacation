@@ -119,6 +119,10 @@ jobs:
           echo "vm_public_ip=${vm_public_ip}" >> "$GITHUB_OUTPUT"
           echo "vm_public_fqdn=${vm_public_fqdn}" >> "$GITHUB_OUTPUT"
 
+      - name: Ensure VM running
+        if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
+        run: az vm start --resource-group "${AZURE_RESOURCE_GROUP}" --name triptailor-vm
+
       - name: Install Ansible
         if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
         run: |
