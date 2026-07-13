@@ -83,7 +83,7 @@ If you are moving to a new Azure account because the old account ran out of cred
 6. Grant `Storage Blob Data Contributor` on the state storage account to both your local user and the GitHub Actions service principal.
 7. Create or copy an SSH key pair for the VM. If the private key was exposed to the old account or old workflow runs, generate a fresh pair.
 8. Create or select the Azure OpenAI/Cognitive Services resource for `genai-service`, create a model deployment, and copy its endpoint and API key.
-9. In Cost Management, check the current credit balance. Set the monthly budget amount to `current balance - 5`; for example, use `95` if the new account has `100 USD` available.
+9. In Cost Management, check the current credit balance. Set the monthly budget amount to `current balance - 5`; for example, use `78` if the new account has `83 EUR` available.
 
 Add a federated credential for your repository and the `azure` GitHub environment used by `.github/workflows/azure-vm-deploy.yaml`.
 
@@ -190,7 +190,7 @@ Add these optional repository variables if you want values different from the Te
 | `AZURE_VM_SIZE` | `Standard_B2ats_v2` |
 | `AZURE_VM_ADMIN_USERNAME` | `tripadmin` |
 | `AZURE_LLM_BASE_URL` | Azure OpenAI endpoint URL |
-| `AZURE_MONTHLY_BUDGET_AMOUNT` | `95` |
+| `AZURE_MONTHLY_BUDGET_AMOUNT` | `78` |
 | `AZURE_MONTHLY_BUDGET_START_DATE` | `2026-07-01T00:00:00Z` |
 | `AZURE_MONTHLY_BUDGET_END_DATE` | `2027-07-01T00:00:00Z` |
 | `AZURE_BUDGET_ALERT_EMAIL_ADDRESSES` | Empty, which disables budget alert creation |

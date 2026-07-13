@@ -36,7 +36,7 @@ variable "ssh_public_key_path" {
 variable "monthly_budget_amount" {
   description = "Monthly Azure budget amount. Set this to current credits minus the remaining-credit buffer you want to preserve."
   type        = number
-  default     = 95
+  default     = 78
 
   validation {
     condition     = var.monthly_budget_amount >= 0
