@@ -161,19 +161,20 @@ jobs:
 
       - name: Wait for rollout
         run: |
-          kubectl -n "${AET_NAMESPACE}" rollout status deploy/db --timeout=180s
-          kubectl -n "${AET_NAMESPACE}" rollout status deploy/persistence-service --timeout=180s
-          kubectl -n "${AET_NAMESPACE}" rollout status deploy/travel-context-service --timeout=180s
-          kubectl -n "${AET_NAMESPACE}" rollout status deploy/genai-service --timeout=180s
-          kubectl -n "${AET_NAMESPACE}" rollout status deploy/backend --timeout=180s
-          kubectl -n "${AET_NAMESPACE}" rollout status deploy/frontend --timeout=180s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/db --timeout=600s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/persistence-service --timeout=600s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/travel-context-service --timeout=600s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/genai-service --timeout=600s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/backend --timeout=600s
+          kubectl -n "${AET_NAMESPACE}" rollout status deploy/frontend --timeout=600s
           # Monitoring pods use Recreate + RWO PVCs; catch a stuck rollout here
           # instead of silently serving the old (misconfigured) pod.
           for d in prometheus grafana tempo; do
             if kubectl -n "${AET_NAMESPACE}" get deploy/"$d" >/dev/null 2>&1; then
-              kubectl -n "${AET_NAMESPACE}" rollout status deploy/"$d" --timeout=180s
+              kubectl -n "${AET_NAMESPACE}" rollout status deploy/"$d" --timeout=600s
             fi
           done
 
       - name: Show deployment status
+        if: always()
         run: kubectl -n "${AET_NAMESPACE}" get pods,svc,ingress
