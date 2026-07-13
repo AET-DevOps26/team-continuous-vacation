@@ -178,7 +178,16 @@ class ScheduleService:
             len(prompt),
             prompt,
         )
-        response_text = await self._call_llm(prompt)
+        try:
+            response_text = await self._call_llm(prompt)
+        except Exception as error:
+            logger.warning(
+                "Alternative activity LLM call failed; using deterministic fallback: %s",
+                error,
+            )
+            GENERATIONS_TOTAL.labels(kind="alternative", outcome="fallback").inc()
+            return self._fallback_alternative_activity(request)
+
         logger.debug(
             "Alternative activity LLM raw response length=%s response=%r",
             len(response_text or ""),
@@ -385,6 +394,108 @@ class ScheduleService:
             raise ValueError(
                 "Alternative activity must not duplicate an existing activity"
             )
+
+    def _fallback_alternative_activity(
+        self,
+        request: AlternativeActivityRequest,
+    ) -> Activity:
+        instruction = request.instruction.lower()
+        is_indoor = self._fallback_is_indoor(request, instruction)
+        tags = self._fallback_tags(instruction, is_indoor)
+        title = self._unique_fallback_title(
+            self._fallback_title_base(request, instruction, is_indoor),
+            request,
+        )
+
+        return Activity(
+            id=uuid4(),
+            dayId=request.activity.dayId,
+            timeBlock=request.activity.timeBlock,
+            title=title,
+            description=(
+                f"A practical replacement in {request.tripContext.destination} "
+                f"that follows the request: {request.instruction.strip()}"
+            ),
+            durationMinutes=request.activity.durationMinutes,
+            isIndoor=is_indoor,
+            tags=tags,
+        )
+
+    def _fallback_is_indoor(
+        self,
+        request: AlternativeActivityRequest,
+        instruction: str,
+    ) -> bool:
+        if any(word in instruction for word in ("indoor", "inside", "rain", "weather")):
+            return True
+        if any(word in instruction for word in ("outdoor", "outside", "open air")):
+            return False
+        return request.activity.isIndoor if request.activity.isIndoor is not None else True
+
+    def _fallback_tags(
+        self,
+        instruction: str,
+        is_indoor: bool,
+    ) -> list[ActivityTag]:
+        tags = [ActivityTag.INDOOR if is_indoor else ActivityTag.OUTDOOR]
+        tag_keywords = (
+            (ActivityTag.FOOD, ("food", "dinner", "lunch", "breakfast", "restaurant")),
+            (
+                ActivityTag.CULTURAL,
+                ("culture", "cultural", "museum", "gallery", "history"),
+            ),
+            (ActivityTag.SPORTY, ("sport", "active", "fitness", "climb", "bike")),
+            (ActivityTag.RELAXING, ("relax", "calm", "spa", "quiet")),
+            (ActivityTag.SHOPPING, ("shop", "market", "store")),
+            (ActivityTag.ENTERTAINMENT, ("show", "music", "concert", "theater")),
+            (ActivityTag.FAMILY_FRIENDLY, ("family", "kids", "children")),
+            (ActivityTag.PARTY, ("party", "bar", "club", "nightlife")),
+        )
+        for tag, keywords in tag_keywords:
+            if any(keyword in instruction for keyword in keywords) and tag not in tags:
+                tags.append(tag)
+        return tags
+
+    def _fallback_title_base(
+        self,
+        request: AlternativeActivityRequest,
+        instruction: str,
+        is_indoor: bool,
+    ) -> str:
+        destination = request.tripContext.destination
+        if any(word in instruction for word in ("food", "dinner", "lunch", "restaurant")):
+            return f"{destination} local food tasting"
+        if any(
+            word in instruction
+            for word in ("museum", "culture", "cultural", "gallery", "history")
+        ):
+            return f"{destination} cultural visit"
+        if any(word in instruction for word in ("sport", "active", "fitness", "climb")):
+            return f"{destination} active session"
+        if is_indoor:
+            return f"{destination} indoor experience"
+        return f"{destination} outdoor experience"
+
+    def _unique_fallback_title(
+        self,
+        base_title: str,
+        request: AlternativeActivityRequest,
+    ) -> str:
+        existing_titles = {
+            activity.title.strip().lower()
+            for day in request.tripContext.days
+            for activity in day.activities
+        }
+        candidates = [
+            base_title,
+            f"{base_title} alternative",
+            f"{base_title} replacement",
+            f"{base_title} option",
+        ]
+        for candidate in candidates:
+            if candidate.strip().lower() not in existing_titles:
+                return candidate
+        return f"{base_title} {uuid4().hex[:6]}"
 
     def _to_day(self, day_data: GeneratedDay) -> Day:
         day_id = uuid4()

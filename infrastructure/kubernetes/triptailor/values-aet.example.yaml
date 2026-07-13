@@ -29,7 +29,7 @@ genaiService:
     tag: change-me-to-git-sha
   config:
     LLM_PROVIDER: azure
-    AZURE_LLM_BASE_URL: https://continous-vacation.cognitiveservices.azure.com/
+    AZURE_LLM_BASE_URL: https://flohop-openai.openai.azure.com/
     AZURE_LLM_API_VERSION: 2024-12-01-preview
     MODEL_NAME: gpt-5-nano
     TEMPERATURE: "0.7"

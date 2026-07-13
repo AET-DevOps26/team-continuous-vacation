@@ -24,6 +24,11 @@ class StaticLLMProvider:
         return self.response
 
 
+class FailingLLMProvider:
+    async def generate(self, prompt, options):
+        raise RuntimeError("rate limit")
+
+
 class NullTravelContextClient:
     async def get_trip_context(self, preferences, include_events=True):
         return None
@@ -148,3 +153,51 @@ async def test_alternative_generation_rejects_duplicate_existing_activity_title(
 
     with pytest.raises(ScheduleGenerationError, match="expected format"):
         await service.suggest_alternative(request)
+
+
+@pytest.mark.asyncio
+async def test_alternative_generation_uses_fallback_when_llm_call_fails():
+    day_id = UUID("550e8400-e29b-41d4-a716-446655440001")
+    replaced_activity = Activity(
+        id=UUID("550e8400-e29b-41d4-a716-446655440000"),
+        dayId=day_id,
+        timeBlock=TimeBlock.MORNING,
+        title="Outdoor walking tour",
+        description="Walk outside.",
+        durationMinutes=120,
+        isIndoor=False,
+        tags=[ActivityTag.OUTDOOR],
+    )
+    request = AlternativeActivityRequest(
+        instruction="Make this indoor and cultural",
+        activity=replaced_activity,
+        tripContext=TripContext(
+            destination="Munich",
+            startDate=date(2026, 7, 1),
+            endDate=date(2026, 7, 1),
+            vibe="cultural",
+            days=[
+                Day(
+                    id=day_id,
+                    dayNumber=1,
+                    date=date(2026, 7, 1),
+                    activities=[replaced_activity],
+                )
+            ],
+        ),
+    )
+    service = ScheduleService(
+        llm_provider=FailingLLMProvider(),
+        travel_context_client=NullTravelContextClient(),
+        context_relevance_classifier=AlwaysFetchContextClassifier(),
+    )
+
+    alternative = await service.suggest_alternative(request)
+
+    assert alternative.dayId == day_id
+    assert alternative.timeBlock == TimeBlock.MORNING
+    assert alternative.durationMinutes == 120
+    assert alternative.title != replaced_activity.title
+    assert alternative.isIndoor is True
+    assert ActivityTag.INDOOR in alternative.tags
+    assert ActivityTag.CULTURAL in alternative.tags
