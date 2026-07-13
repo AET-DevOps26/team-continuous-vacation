@@ -190,6 +190,7 @@ Add these optional repository variables if you want values different from the Te
 | `AZURE_VM_SIZE` | `Standard_B2ats_v2` |
 | `AZURE_VM_ADMIN_USERNAME` | `tripadmin` |
 | `AZURE_PUBLIC_IP_DNS_LABEL` | `tum-triptailor-354f93b6` |
+| `AZURE_ACME_EMAIL` | `f.hoppe@tum.de` |
 | `AZURE_LLM_BASE_URL` | Azure OpenAI endpoint URL |
 | `AZURE_MONTHLY_BUDGET_AMOUNT` | `78` |
 | `AZURE_MONTHLY_BUDGET_START_DATE` | `2026-07-01T00:00:00Z` |
@@ -198,7 +199,7 @@ Add these optional repository variables if you want values different from the Te
 
 The default `Standard_B2ats_v2` in `polandcentral` is chosen because Azure reported smaller burstable sizes as unavailable for this student subscription in the checked EU regions, while `Standard_B2ats_v2` was available in `polandcentral`. If this SKU becomes unavailable, check available burstable sizes with `az vm list-skus --location polandcentral --size Standard_B --all --output table` and set `location`/`vm_size` in `terraform.tfvars` or the `AZURE_LOCATION`/`AZURE_VM_SIZE` GitHub repository variables to the cheapest available option.
 
-The `AZURE_PUBLIC_IP_DNS_LABEL` value configures Azure Public IP DNS. With the default above, the frontend URL is `http://tum-triptailor-354f93b6.polandcentral.cloudapp.azure.com:3000`. This only creates a stable HTTP hostname; HTTPS requires a TLS certificate and reverse-proxy configuration.
+The `AZURE_PUBLIC_IP_DNS_LABEL` value configures Azure Public IP DNS. With the default above, the frontend URL is `https://tum-triptailor-354f93b6.polandcentral.cloudapp.azure.com`. On Azure, Ansible requests a Let's Encrypt certificate with Certbot, writes the production NGINX HTTPS config, and starts Docker Compose with an Azure-only override for ports `80` and `443`. The legacy HTTP endpoint remains available at `http://tum-triptailor-354f93b6.polandcentral.cloudapp.azure.com:3000`.
 
 ### Cost alert setup
 
@@ -235,9 +236,9 @@ After it completes, the app is available at:
 
 | Service | URL |
 | --- | --- |
-| Frontend | `http://<VM_IP>:3000` |
-| Backend | `http://<VM_IP>:8080` |
-| Persistence | `http://<VM_IP>:8081` |
+| Frontend | `https://<VM_FQDN>` |
+| Backend | `https://<VM_FQDN>/api/*` |
+| Monitoring | `https://<VM_FQDN>/grafana/`, `https://<VM_FQDN>/prometheus/` |
 
 Use the manual workflow option `terraform_action=destroy` to remove the Azure VM and related resources created by Terraform. The Terraform state storage account is intentionally not destroyed by this repo because it is the backend that stores state.
 
@@ -268,7 +269,7 @@ ansible-playbook -i inventory.ini playbook.yml -e @vars.yml
 
 | Service    | URL                  |
 |------------|----------------------|
-| Gateway    | `http://<VM_IP>:3000` |
+| Gateway    | `https://<VM_FQDN>` |
 
 The gateway is the single public entrypoint. It routes `/` to the frontend and `/api/*` to the backend. Persistence, GenAI, and Postgres are internal services.
 

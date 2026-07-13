@@ -34,6 +34,7 @@ env:
   AZURE_VM_SIZE: ${{ vars.AZURE_VM_SIZE || 'Standard_B2ats_v2' }}
   AZURE_VM_ADMIN_USERNAME: ${{ vars.AZURE_VM_ADMIN_USERNAME || 'tripadmin' }}
   AZURE_PUBLIC_IP_DNS_LABEL: ${{ vars.AZURE_PUBLIC_IP_DNS_LABEL || 'tum-triptailor-354f93b6' }}
+  AZURE_ACME_EMAIL: ${{ vars.AZURE_ACME_EMAIL || 'f.hoppe@tum.de' }}
   AZURE_LLM_BASE_URL: ${{ vars.AZURE_LLM_BASE_URL || secrets.AZURE_LLM_BASE_URL }}
   AZURE_MONTHLY_BUDGET_AMOUNT: ${{ vars.AZURE_MONTHLY_BUDGET_AMOUNT || '78' }}
   AZURE_MONTHLY_BUDGET_START_DATE: ${{ vars.AZURE_MONTHLY_BUDGET_START_DATE || '2026-07-01T00:00:00Z' }}
@@ -160,6 +161,7 @@ jobs:
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          VM_PUBLIC_FQDN: ${{ steps.terraform_output.outputs.vm_public_fqdn }}
         run: |
           if [ -z "${AZURE_LLM_API_KEY}" ] || [ -z "${AZURE_LLM_BASE_URL}" ]; then
             echo "AZURE_LLM_API_KEY and AZURE_LLM_BASE_URL repository secrets are required." >&2
@@ -174,6 +176,8 @@ jobs:
             -e "branch=${GITHUB_REF_NAME}" \
             -e "azure_llm_api_key=${AZURE_LLM_API_KEY}" \
             -e "azure_llm_base_url=${AZURE_LLM_BASE_URL}" \
+            -e "public_hostname=${VM_PUBLIC_FQDN}" \
+            -e "acme_email=${AZURE_ACME_EMAIL}" \
             -e "serpapi_api_key=${SERPAPI_API_KEY}" \
             -e "postgres_password=${POSTGRES_PASSWORD}" \
             -e "jwt_secret=${JWT_SECRET}"
@@ -184,6 +188,7 @@ jobs:
           VM_PUBLIC_IP: ${{ steps.terraform_output.outputs.vm_public_ip }}
           VM_PUBLIC_FQDN: ${{ steps.terraform_output.outputs.vm_public_fqdn }}
         run: |
-          echo "Frontend DNS: http://${VM_PUBLIC_FQDN}:3000"
-          echo "Frontend: http://${VM_PUBLIC_IP}:3000"
-          echo "Backend:  http://${VM_PUBLIC_IP}:8080"
+          echo "Frontend HTTPS: https://${VM_PUBLIC_FQDN}"
+          echo "Frontend HTTP fallback: http://${VM_PUBLIC_FQDN}:3000"
+          echo "Frontend IP fallback: http://${VM_PUBLIC_IP}:3000"
+          echo "Backend API: https://${VM_PUBLIC_FQDN}/api/"
