@@ -146,9 +146,11 @@ jobs:
           printf '%s' "${SERPAPI_API_KEY}" > /tmp/serpapi-api-key
 
           if kubectl -n "${AET_NAMESPACE}" get deploy/db >/dev/null 2>&1; then
-            kubectl -n "${AET_NAMESPACE}" exec deploy/db -- sh -c \
-              'PGPASSWORD="${POSTGRES_PASSWORD}" psql -U tripuser -d triptailor -v new_password="$1" -c "ALTER USER tripuser WITH PASSWORD :'\''new_password'\'';"' \
-              sh "${POSTGRES_PASSWORD}"
+            kubectl -n "${AET_NAMESPACE}" exec -i deploy/db -- sh -c \
+              'PGPASSWORD="${POSTGRES_PASSWORD}" psql -U tripuser -d triptailor -v ON_ERROR_STOP=1 -v new_password="$1"' \
+              sh "${POSTGRES_PASSWORD}" <<'SQL'
+          ALTER USER tripuser WITH PASSWORD :'new_password';
+          SQL
           fi
 
           helm upgrade --install triptailor ./infrastructure/kubernetes/triptailor \
