@@ -33,6 +33,12 @@ variable "ssh_public_key_path" {
   default     = "~/.ssh/id_rsa.pub"
 }
 
+variable "public_ip_dns_label" {
+  description = "DNS label for the Azure Public IP. The resulting FQDN is <label>.<region>.cloudapp.azure.com."
+  type        = string
+  default     = "tum-triptailor-354f93b6"
+}
+
 variable "monthly_budget_amount" {
   description = "Monthly Azure budget amount. Set this to current credits minus the remaining-credit buffer you want to preserve."
   type        = number

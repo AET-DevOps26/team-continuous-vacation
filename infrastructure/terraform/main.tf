@@ -99,11 +99,13 @@ resource "azurerm_virtual_network" "main" {
 }
 
 resource "azurerm_public_ip" "main" {
-  name                = "triptailor-pip"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
+  name                    = "triptailor-pip"
+  location                = azurerm_resource_group.main.location
+  resource_group_name     = azurerm_resource_group.main.name
+  allocation_method       = "Static"
+  sku                     = "Standard"
+  domain_name_label       = var.public_ip_dns_label
+  idle_timeout_in_minutes = 4
 }
 
 resource "azurerm_network_security_group" "main" {
