@@ -145,6 +145,12 @@ jobs:
           printf '%s' "${AZURE_LLM_API_KEY}" > /tmp/azure-llm-api-key
           printf '%s' "${SERPAPI_API_KEY}" > /tmp/serpapi-api-key
 
+          if kubectl -n "${AET_NAMESPACE}" get deploy/db >/dev/null 2>&1; then
+            kubectl -n "${AET_NAMESPACE}" exec deploy/db -- sh -c \
+              'PGPASSWORD="${POSTGRES_PASSWORD}" psql -U tripuser -d triptailor -v new_password="$1" -c "ALTER USER tripuser WITH PASSWORD :'\''new_password'\'';"' \
+              sh "${POSTGRES_PASSWORD}"
+          fi
+
           helm upgrade --install triptailor ./infrastructure/kubernetes/triptailor \
             --namespace "${AET_NAMESPACE}" \
             --set persistenceService.image.tag="${GITHUB_SHA::7}" \
