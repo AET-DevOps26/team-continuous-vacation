@@ -26,7 +26,9 @@ locals {
     for email in split(",", var.budget_alert_email_addresses) : trimspace(email)
   ])
   budget_alerts_enabled = length(local.budget_alert_email_addresses) > 0 && var.monthly_budget_amount > 0
-  subscription_resource_id = startswith(var.subscription_id, "/subscriptions/") ? var.subscription_id : "/subscriptions/${var.subscription_id}"
+  subscription_resource_id = (
+    startswith(var.subscription_id, "/subscriptions/") ? var.subscription_id : "/subscriptions/${var.subscription_id}"
+  )
 }
 
 resource "azurerm_resource_group" "main" {
