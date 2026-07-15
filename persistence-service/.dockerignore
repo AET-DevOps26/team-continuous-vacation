@@ -1,6 +1,0 @@
-.DS_Store
-.gradle/
-.kotlin/
-build/
-out/
-*.iml

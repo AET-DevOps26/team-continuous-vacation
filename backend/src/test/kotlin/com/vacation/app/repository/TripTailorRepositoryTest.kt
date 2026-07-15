@@ -1,7 +1,7 @@
-package com.vacation.persistence.repository
+package com.vacation.app.repository
 
-import com.vacation.persistence.api.ApiException
-import com.vacation.persistence.api.TravelerCreateRequest
+import com.vacation.app.api.ApiException
+import com.vacation.app.api.TravelerCreateRequest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows

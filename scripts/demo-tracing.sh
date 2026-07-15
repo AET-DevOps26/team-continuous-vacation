@@ -35,7 +35,7 @@ done
 
 if [[ "${gateway_ready}" != "1" ]]; then
 	echo "Gateway did not become ready. Recent logs:" >&2
-	compose logs --tail=80 gateway backend persistence-service genai-service travel-context-service >&2
+	compose logs --tail=80 gateway backend genai-service travel-context-service >&2
 	exit 1
 fi
 
@@ -77,13 +77,13 @@ fi
 
 echo
 echo "Recent correlated service logs:"
-compose logs --tail=60 backend persistence-service genai-service travel-context-service \
+compose logs --tail=60 backend genai-service travel-context-service \
 	| grep -E "trace_id=|traceId|span_id=|spanId" || true
 
 echo
 echo "Open Grafana at ${GRAFANA_URL}"
 echo "Open Dashboards -> TripTailor -> TripTailor Services for metrics."
 echo "Use Explore -> Tempo and search recent traces for services:"
-echo "  backend, persistence-service, genai-service, travel-context-service"
+echo "  backend, genai-service, travel-context-service"
 echo
 echo "Tempo is also available at http://localhost:3200"

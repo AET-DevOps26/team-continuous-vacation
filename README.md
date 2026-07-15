@@ -43,13 +43,12 @@ TripTailor runs as five application services plus Postgres:
 | Service | Path | Responsibility |
 | --- | --- | --- |
 | Frontend | `frontend/` | React, Vite, and Refine UI for authentication, trip creation, trip listing, and itinerary editing. |
-| Backend API | `backend/` | Public Spring Boot backend-for-frontend. Owns auth, JWT validation, trip orchestration, and calls to internal services. |
-| Persistence Service | `persistence-service/` | Internal Spring Boot database access layer for travelers, trips, days, activities, and tags. |
+| Backend API | `backend/` | Public Spring Boot backend-for-frontend. Owns auth, JWT validation, trip orchestration, PostgreSQL persistence, and calls to internal services. |
 | GenAI Service | `genai-service/` | Internal FastAPI service that prompts the configured LLM and validates structured itinerary output. |
 | Travel Context Service | `travel-context-service/` | Internal FastAPI enrichment service for geocoding, events, places, weather, ranking, and cache-backed provider calls. |
-| Database | Docker Compose / Helm | PostgreSQL backing the persistence service. |
+| Database | Docker Compose / Helm | PostgreSQL backing the backend. |
 
-In Docker Compose and Kubernetes, the gateway exposes the frontend and routes `/api/*` to the backend. Persistence, GenAI, travel-context, and Postgres are internal implementation services.
+In Docker Compose and Kubernetes, the gateway exposes the frontend and routes `/api/*` to the backend. GenAI, travel-context, and Postgres are internal implementation services.
 
 ### Local Ports (Docker Compose)
 
@@ -65,7 +64,6 @@ Running `docker compose up --build` publishes the following host ports. Services
 | PostgreSQL | `5433` | Host `5433` → container `5432` (user `tripuser`, db `triptailor`). |
 | Frontend | — | Internal only; reach via the gateway on `3000`. |
 | Backend API | — | Internal only (`8080`); reach via the gateway `/api/*`. |
-| Persistence Service | — | Internal only (`8081`). |
 | GenAI Service | — | Internal only (`8000`). |
 
 ### Monitoring in Kubernetes and Azure
@@ -79,19 +77,18 @@ The same Prometheus + Grafana + Tempo suite ships to both deployment targets:
 
 TripTailor uses independently deployable services with explicit HTTP contracts. The browser loads the React application through the NGINX gateway and sends all application requests to the public Spring Boot backend. That backend is the system's security and orchestration boundary: it authenticates travelers with signed JWTs, validates public requests, coordinates trip generation, and prevents clients from calling internal services directly.
 
-The backend delegates durable state to the persistence service, which is the only application service allowed to access PostgreSQL. For trip creation and activity regeneration, the backend calls the GenAI service. The GenAI service builds prompts, requests structured output from the configured LLM, validates that output with Pydantic models, and assigns the identifiers required by the application contract. Before schedule generation, it requests destination context from the travel-context service. That service encapsulates geocoding, place, event, and weather providers, including caching and ranking, so provider-specific concerns do not leak into trip orchestration.
+The backend owns durable state directly in PostgreSQL through Spring JDBC. For trip creation and activity regeneration, the backend calls the GenAI service. The GenAI service builds prompts, requests structured output from the configured LLM, validates that output with Pydantic models, and assigns the identifiers required by the application contract. Before schedule generation, it requests destination context from the travel-context service. That service encapsulates geocoding, place, event, and weather providers, including caching and ranking, so provider-specific concerns do not leak into trip orchestration.
 
-All application-owned HTTP service interfaces use JSON and are described in `api-specification/`. The public contract is `frontend.yaml`; internal contracts isolate persistence, GenAI, and travel-context behavior. Runtime deployment is available through Docker Compose and the Helm chart. Prometheus scrapes every backend service, Grafana visualizes the exported metrics, and Tempo receives distributed traces.
+All application-owned HTTP service interfaces use JSON and are described in `api-specification/`. The public contract is `frontend.yaml`; internal contracts isolate GenAI and travel-context behavior. Runtime deployment is available through Docker Compose and the Helm chart. Prometheus scrapes every backend service, Grafana visualizes the exported metrics, and Tempo receives distributed traces.
 
 ### Subsystems and interfaces
 
 | Caller | Callee | Interface | Responsibility |
 | --- | --- | --- | --- |
 | Browser frontend | Backend API | `/api/*` through NGINX; public OpenAPI contract | Authentication and traveler-facing trip workflows |
-| Backend API | Persistence service | Internal REST; persistence OpenAPI contract | Traveler, trip, day, and activity storage |
 | Backend API | GenAI service | Internal REST; GenAI OpenAPI contract | Schedule generation and contextual activity alternatives |
 | GenAI service | Travel-context service | `POST /context`; travel-context OpenAPI contract | Ranked destination, place, event, and weather context |
-| Persistence service | PostgreSQL | JDBC/SQL | Durable application state |
+| Backend API | PostgreSQL | JDBC/SQL | Durable application state (travelers, trips, days, activities) |
 | GenAI service | Configured LLM | OpenAI-compatible HTTPS API | Schema-constrained schedule and activity generation |
 | Travel-context service | External providers | Provider-specific HTTPS APIs | Geocoding, places, events, and weather |
 | Prometheus | Runtime services | `/actuator/prometheus` or `/metrics` | Metrics collection and alert evaluation |
@@ -129,7 +126,6 @@ Run commands from the module directory unless noted.
 | --- | --- | --- |
 | Frontend | `npm run lint && npm run test && npm run build` | `npm run test:coverage` |
 | Backend API | `./gradlew build` (includes Detekt) | `./gradlew test jacocoTestReport` |
-| Persistence Service | `./gradlew build` (includes Detekt) | `./gradlew test jacocoTestReport` |
 | GenAI Service | `flake8 app tests && mypy app && python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
 | Travel Context Service | `flake8 app tests && mypy app && python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
 | Full local stack | `docker compose up --build` | Not applicable; use module coverage commands. |
@@ -179,7 +175,7 @@ The system deploys to two environments:
 
 | Team Member | Primary Subsystem |
 | --- | --- |
-| Florian | Backend, Persistence Service, Tracing |
+| Florian | Backend, Persistence, Tracing |
 | Jonas | Frontend, Weather Travel Context Service, Prometheus |
 | Thomas | GenAI Service, Travel Context Service, Grafana |
 
@@ -189,7 +185,7 @@ layout and conventions).
 
 ## Source Of Truth And Generated Files
 
-- OpenAPI contracts live in `api-specification/`. The current persistence contract file is intentionally named `persistance.yaml` for compatibility with existing build scripts.
-- `backend/src/main/resources/openapi.yaml` and `persistence-service/src/main/resources/openapi.yaml` are generated by Gradle resource processing from `api-specification/`.
+- OpenAPI contracts live in `api-specification/`.
+- `backend/src/main/resources/openapi.yaml` is generated by Gradle resource processing from `api-specification/`.
 - `frontend/src/lib/api-types.ts` is generated from `api-specification/frontend.yaml` with `npm run generate-api-types`.
 - Build output, coverage reports, virtual environments, copied OpenAPI resources, and generated frontend API types are ignored and should not be edited by hand.

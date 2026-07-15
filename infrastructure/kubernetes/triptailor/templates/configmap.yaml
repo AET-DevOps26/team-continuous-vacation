@@ -5,7 +5,6 @@ metadata:
   labels:
     {{- include "triptailor.labels" . | nindent 4 }}
 data:
-  PERSISTENCE_BASE_URL: "http://{{ .Values.persistenceService.service.name }}:{{ .Values.persistenceService.service.port }}"
   GENAI_BASE_URL: "http://{{ .Values.genaiService.service.name }}:{{ .Values.genaiService.service.port }}"
   TRAVEL_CONTEXT_BASE_URL: "http://{{ .Values.travelContextService.service.name }}:{{ .Values.travelContextService.service.port }}"
   SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ .Values.postgres.service.name }}:{{ .Values.postgres.service.port }}/{{ .Values.postgres.auth.database }}"

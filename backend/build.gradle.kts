@@ -36,6 +36,7 @@ detekt {
 
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	implementation("org.springframework.boot:spring-boot-starter-jdbc")
 	implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
@@ -49,6 +50,8 @@ dependencies {
 	implementation("com.fasterxml.jackson.core:jackson-databind")
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+	runtimeOnly("org.postgresql:postgresql")
+	testRuntimeOnly("com.h2database:h2")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webflux-test")
@@ -74,6 +77,8 @@ configurations.all {
 				useVersion("3.1.4") // CVE-2026-54512/54513
 			requested.group == "io.netty" && requested.name != "netty-bom" ->
 				useVersion("4.2.15.Final") // CVE-2026-44249/45416/50010/47691/...
+			requested.group == "org.postgresql" && requested.name == "postgresql" ->
+				useVersion("42.7.11") // CVE-2026-42198
 		}
 	}
 }

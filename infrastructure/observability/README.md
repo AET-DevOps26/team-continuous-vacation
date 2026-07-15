@@ -5,7 +5,7 @@ TripTailor uses OpenTelemetry tracing for backend service flows.
 A trace backend receives spans from instrumented services, stores them, and lets
 you inspect one complete request by trace ID. Without a backend, services may
 create trace IDs, but there is no durable place to view the full waterfall across
-`backend`, `persistence-service`, `genai-service`, and `travel-context-service`.
+`backend`, `genai-service`, and `travel-context-service`.
 
 Tempo is used for local tracing because it accepts OTLP traces and integrates
 directly with Grafana. The root `docker-compose.yml` includes Tempo and Grafana
@@ -35,7 +35,6 @@ Open Dashboards -> TripTailor -> `TripTailor Services` for metrics. Use Explore
 with the `Tempo` datasource and search for recent traces involving:
 
 - `backend`
-- `persistence-service`
 - `genai-service`
 - `travel-context-service`
 

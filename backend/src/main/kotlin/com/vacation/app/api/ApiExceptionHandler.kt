@@ -1,6 +1,5 @@
 package com.vacation.app.api
 
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -24,14 +23,8 @@ class ApiExceptionHandler {
 	@ExceptionHandler(WebClientResponseException::class)
 	fun handleWebClient(exception: WebClientResponseException): ResponseEntity<ApiError> {
 		val status = exception.statusCode.value()
-		val type = when (status) {
-			401 -> "INVALID_CREDENTIALS"
-			404 -> "NOT_FOUND"
-			409 -> "CONFLICT"
-			else -> "UPSTREAM_ERROR"
-		}
 		return ResponseEntity
 			.status(status)
-			.body(ApiError(type, HttpStatus.valueOf(status).reasonPhrase, exception.responseBodyAsString, status))
+			.body(ApiError("UPSTREAM_ERROR", "Upstream Error", exception.responseBodyAsString, status))
 	}
 }

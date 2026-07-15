@@ -271,7 +271,7 @@ ansible-playbook -i inventory.ini playbook.yml -e @vars.yml
 |------------|----------------------|
 | Gateway    | `https://<VM_FQDN>` |
 
-The gateway is the single public entrypoint. It routes `/` to the frontend and `/api/*` to the backend. Persistence, GenAI, and Postgres are internal services.
+The gateway is the single public entrypoint. It routes `/` to the frontend and `/api/*` to the backend. GenAI and Postgres are internal services.
 
 ## Teardown
 

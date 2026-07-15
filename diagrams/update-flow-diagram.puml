@@ -5,7 +5,6 @@ actor User
 participant Frontend
 participant "Backend API\n(Spring Boot)" as API
 participant "GenAI Service\n(Python)" as AI
-participant "Persistence Service\n(Spring Boot)" as PERSIST
 database DB
 
 User -> Frontend : Click "Edit" on activity block
@@ -13,19 +12,15 @@ User -> Frontend : Enter update request\n("Make this indoor")
 
 Frontend -> API : PATCH /trips/{tripId}/days/{dayId}/activities/{activityId}
 
-API -> PERSIST : GET /trips/{tripId}?travelerId={id}
-PERSIST -> DB : Query itinerary + activity
-DB --> PERSIST : Return trip data
-PERSIST --> API : Activity context
+API -> DB : Query itinerary + activity
+DB --> API : Return trip data
 
 API -> AI : POST /activities/alternative
 AI -> AI : Call LLM with targeted context
 AI --> API : Return replacement activity JSON
 
-API -> PERSIST : PUT /trips/{tripId}/days/{dayId}/activities/{activityId}
-PERSIST -> DB : Replace activity row
-DB --> PERSIST : Activity updated
-PERSIST --> API : Updated activity
+API -> DB : Replace activity row
+DB --> API : Activity updated
 
 API --> Frontend : Return updated activity
 
