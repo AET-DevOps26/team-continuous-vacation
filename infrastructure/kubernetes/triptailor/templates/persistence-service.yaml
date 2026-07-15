@@ -34,11 +34,16 @@ spec:
         app.kubernetes.io/component: persistence-service
         {{- include "triptailor.selectorLabels" . | nindent 8 }}
     spec:
+      securityContext:
+        {{- include "triptailor.podSecurityContext" (dict "uid" 1000) | nindent 8 }}
+      automountServiceAccountToken: false
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: persistence-service
           image: "{{ .Values.persistenceService.image.repository }}:{{ .Values.persistenceService.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.persistenceService.service.port }}

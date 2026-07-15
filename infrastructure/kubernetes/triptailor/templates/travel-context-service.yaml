@@ -34,11 +34,16 @@ spec:
         app.kubernetes.io/component: travel-context-service
         {{- include "triptailor.selectorLabels" . | nindent 8 }}
     spec:
+      securityContext:
+        {{- include "triptailor.podSecurityContext" (dict "uid" 1001) | nindent 8 }}
+      automountServiceAccountToken: false
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: travel-context-service
           image: "{{ .Values.travelContextService.image.repository }}:{{ .Values.travelContextService.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.travelContextService.service.port }}

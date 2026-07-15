@@ -14,10 +14,18 @@ COPY --from=api-spec frontend.yaml ../api-specification/frontend.yaml
 RUN npm run build
 
 # Stage 2: Serve with nginx (also reverse-proxies API routes to backend)
-FROM nginx:alpine AS runner
+# nginx-unprivileged runs as the non-root "nginx" user (uid 101) by default,
+# resolving Dockle CIS-DI-0001 and KICS "Container Running As Root".
+FROM nginxinc/nginx-unprivileged:alpine AS runner
+
+USER root
+# Pull patched OS packages (curl, libexpat, c-ares) flagged by the Trivy image scan.
+RUN apk upgrade --no-cache
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+USER nginx
 
 EXPOSE 3000
 

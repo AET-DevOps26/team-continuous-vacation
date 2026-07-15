@@ -21,6 +21,8 @@ RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
 
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
+# Pull patched OS packages (libexpat, p11-kit) flagged by the Trivy image scan.
+RUN apk upgrade --no-cache
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=build --chown=app:app /workspace/build/libs/*-SNAPSHOT.jar app.jar
 USER app

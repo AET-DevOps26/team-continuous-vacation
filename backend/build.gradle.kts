@@ -60,6 +60,24 @@ dependencies {
 
 }
 
+// Security: force patched transitive versions flagged by the Trivy image scan.
+// eachDependency wins over the io.spring.dependency-management BOM (plain Gradle
+// constraints do not). Remove once the managed Spring Boot BOM ships these versions.
+configurations.all {
+	resolutionStrategy.eachDependency {
+		when {
+			requested.group == "org.apache.tomcat.embed" ->
+				useVersion("11.0.22") // CVE-2026-41293/43512/43515 (CRITICAL)
+			requested.group == "com.fasterxml.jackson.core" && requested.name == "jackson-databind" ->
+				useVersion("2.21.4") // CVE-2026-54512/54513
+			requested.group == "tools.jackson.core" && requested.name == "jackson-databind" ->
+				useVersion("3.1.4") // CVE-2026-54512/54513
+			requested.group == "io.netty" && requested.name != "netty-bom" ->
+				useVersion("4.2.15.Final") // CVE-2026-44249/45416/50010/47691/...
+		}
+	}
+}
+
 kotlin {
 	compilerOptions {
 		freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")

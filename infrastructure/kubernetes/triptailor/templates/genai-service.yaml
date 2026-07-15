@@ -34,11 +34,16 @@ spec:
         app.kubernetes.io/component: genai-service
         {{- include "triptailor.selectorLabels" . | nindent 8 }}
     spec:
+      securityContext:
+        {{- include "triptailor.podSecurityContext" (dict "uid" 1001) | nindent 8 }}
+      automountServiceAccountToken: false
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: genai-service
           image: "{{ .Values.genaiService.image.repository }}:{{ .Values.genaiService.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.genaiService.service.port }}

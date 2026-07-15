@@ -37,11 +37,16 @@ spec:
         app.kubernetes.io/component: frontend
         {{- include "triptailor.selectorLabels" . | nindent 8 }}
     spec:
+      securityContext:
+        {{- include "triptailor.podSecurityContext" (dict "uid" 101) | nindent 8 }}
+      automountServiceAccountToken: false
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.frontend.service.port }}

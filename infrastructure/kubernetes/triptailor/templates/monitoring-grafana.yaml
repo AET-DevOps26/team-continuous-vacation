@@ -89,13 +89,19 @@ spec:
     spec:
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
       securityContext:
+        runAsNonRoot: true
         runAsUser: 472
         runAsGroup: 472
         fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: grafana
           image: "{{ .Values.monitoring.grafana.image.repository }}:{{ .Values.monitoring.grafana.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           env:
             - name: GF_AUTH_ANONYMOUS_ENABLED
               value: "true"
