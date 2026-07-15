@@ -36,11 +36,16 @@ spec:
         app.kubernetes.io/component: backend
         {{- include "triptailor.selectorLabels" . | nindent 8 }}
     spec:
+      securityContext:
+        {{- include "triptailor.podSecurityContext" (dict "uid" 1000) | nindent 8 }}
+      automountServiceAccountToken: false
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.backend.service.port }}

@@ -82,13 +82,19 @@ spec:
     spec:
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
       securityContext:
+        runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: tempo
           image: "{{ .Values.monitoring.tempo.image.repository }}:{{ .Values.monitoring.tempo.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           args:
             - "-config.file=/etc/tempo/tempo.yaml"
           ports:

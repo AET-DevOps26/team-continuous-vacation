@@ -37,11 +37,18 @@ spec:
         app.kubernetes.io/component: postgres
         {{- include "triptailor.selectorLabels" . | nindent 8 }}
     spec:
+      # uid/gid 70 = the "postgres" user in the alpine image; fsGroup makes the
+      # ReadWriteOnce PVC group-writable so postgres can run non-root.
+      securityContext:
+        {{- include "triptailor.podSecurityContext" (dict "uid" 70) | nindent 8 }}
+      automountServiceAccountToken: false
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: postgres
           image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           ports:
             - name: postgres
               containerPort: 5432

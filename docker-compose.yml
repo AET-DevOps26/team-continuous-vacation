@@ -1,5 +1,21 @@
+# Baseline container hardening merged into every service (KICS: cap_drop /
+# no-new-privileges). Services that legitimately start as root add back the
+# minimal caps they need via their own cap_add.
+x-hardening: &hardening
+  security_opt:
+    - "no-new-privileges:true"
+  cap_drop:
+    - ALL
+
 services:
   gateway:
+    <<: *hardening
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
     image: nginx:1.27-alpine
     container_name: triptailor-gateway
     ports:
@@ -13,6 +29,13 @@ services:
       - prometheus
 
   db:
+    <<: *hardening
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     image: postgres:17-alpine
     container_name: triptailor-db
     environment:
@@ -30,6 +53,7 @@ services:
       retries: 5
 
   backend:
+    <<: *hardening
     build:
       context: ./backend
       additional_contexts:
@@ -51,6 +75,7 @@ services:
         condition: service_started
 
   persistence-service:
+    <<: *hardening
     build:
       context: ./persistence-service
       additional_contexts:
@@ -73,6 +98,7 @@ services:
         condition: service_started
 
   genai-service:
+    <<: *hardening
     build:
       context: ./genai-service
     container_name: triptailor-genai
@@ -105,6 +131,7 @@ services:
       start_period: 10s
 
   travel-context-service:
+    <<: *hardening
     build:
       context: ./travel-context-service
     container_name: triptailor-travel-context
@@ -134,6 +161,7 @@ services:
       start_period: 10s
 
   frontend:
+    <<: *hardening
     build:
       context: ./frontend
       additional_contexts:
@@ -145,6 +173,7 @@ services:
       - backend
 
   prometheus:
+    <<: *hardening
     image: prom/prometheus:v3.11.0
     container_name: triptailor-prometheus
     command:
@@ -166,6 +195,7 @@ services:
       - travel-context-service
 
   tempo:
+    <<: *hardening
     image: grafana/tempo:2.9.0
     container_name: triptailor-tempo
     command: ["-config.file=/etc/tempo/tempo.yaml"]
@@ -177,6 +207,7 @@ services:
       - ./monitoring/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
 
   grafana:
+    <<: *hardening
     image: grafana/grafana:12.3.0
     container_name: triptailor-grafana
     ports:
