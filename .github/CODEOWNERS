@@ -1,0 +1,6 @@
+# Code owners for team-continuous-vacation.
+# Owners are automatically requested for review on matching pull requests.
+# See https://docs.github.com/articles/about-code-owners
+
+# Default owner for everything in the repo.
+*       @AET-DevOps26/team-continuous-vacation

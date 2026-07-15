@@ -6,10 +6,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# Least-privilege default; only the coverage-report job that comments on PRs
+# widens this at the job level.
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
   build-frontend:
@@ -18,9 +18,11 @@ jobs:
       run:
         working-directory: ./frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '20'
           cache: 'npm'
@@ -35,7 +37,7 @@ jobs:
         run: npm run test:coverage
       - name: Upload frontend coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-coverage
           path: frontend/coverage/
@@ -49,9 +51,11 @@ jobs:
       run:
         working-directory: ./backend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
       - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -62,7 +66,7 @@ jobs:
         run: ./gradlew build
       - name: Upload backend coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: backend-coverage
           path: backend/build/reports/jacoco/test/
@@ -74,9 +78,11 @@ jobs:
       run:
         working-directory: ./persistence-service
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
       - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -87,7 +93,7 @@ jobs:
         run: ./gradlew build
       - name: Upload persistence coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: persistence-service-coverage
           path: persistence-service/build/reports/jacoco/test/
@@ -99,9 +105,11 @@ jobs:
       run:
         working-directory: ./genai-service
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
       - name: Set up Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -122,7 +130,7 @@ jobs:
           pytest --verbose --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=80
       - name: Upload GenAI coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: genai-service-coverage
           path: |
@@ -136,9 +144,11 @@ jobs:
       run:
         working-directory: ./travel-context-service
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
       - name: Set up Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -159,7 +169,7 @@ jobs:
           pytest --verbose --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=80
       - name: Upload travel context coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: travel-context-service-coverage
           path: |
@@ -171,22 +181,26 @@ jobs:
     needs: [build-frontend, build-backend, build-genai, build-persistence-service, build-travel-context]
     if: always()
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       COVERAGE_THRESHOLD: "80"
       NEEDS_JSON: ${{ toJson(needs) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: .coverage-artifacts
       - name: Create coverage summary
         run: node scripts/coverage-report.mjs
       - name: Publish PR coverage comment
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const fs = require("fs");
@@ -228,7 +242,9 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: triptailor-ci
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
       - name: Validate Docker Compose config
         run: docker compose config --quiet
       - name: Build Docker images
