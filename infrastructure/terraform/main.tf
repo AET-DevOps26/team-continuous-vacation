@@ -1,7 +1,7 @@
 terraform {
   backend "azurerm" {
     resource_group_name  = "triptailor-tfstate-rg"
-    storage_account_name = "continousvacationstorage"
+    storage_account_name = "triptfstate354f93b6"
     container_name       = "tfstate"
     key                  = "triptailor.tfstate"
     use_azuread_auth     = true
@@ -21,9 +21,69 @@ provider "azurerm" {
   subscription_id = var.subscription_id
 }
 
+locals {
+  budget_alert_email_addresses = compact([
+    for email in split(",", var.budget_alert_email_addresses) : trimspace(email)
+  ])
+  budget_alerts_enabled = length(local.budget_alert_email_addresses) > 0 && var.monthly_budget_amount > 0
+  subscription_resource_id = (
+    startswith(var.subscription_id, "/subscriptions/") ? var.subscription_id : "/subscriptions/${var.subscription_id}"
+  )
+}
+
 resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
   location = var.location
+}
+
+resource "azurerm_monitor_action_group" "cost_alerts" {
+  count               = local.budget_alerts_enabled ? 1 : 0
+  name                = "triptailor-cost-alerts"
+  resource_group_name = azurerm_resource_group.main.name
+  short_name          = "costalert"
+
+  dynamic "email_receiver" {
+    for_each = {
+      for index, email in local.budget_alert_email_addresses : tostring(index) => email
+    }
+
+    content {
+      name                    = "email-${email_receiver.key}"
+      email_address           = email_receiver.value
+      use_common_alert_schema = true
+    }
+  }
+}
+
+resource "azurerm_consumption_budget_subscription" "monthly_credit_guard" {
+  count           = local.budget_alerts_enabled ? 1 : 0
+  name            = "triptailor-monthly-credit-guard"
+  subscription_id = local.subscription_resource_id
+  amount          = var.monthly_budget_amount
+  time_grain      = "Monthly"
+
+  time_period {
+    start_date = var.monthly_budget_start_date
+    end_date   = var.monthly_budget_end_date
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 100
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Actual"
+    contact_emails = local.budget_alert_email_addresses
+    contact_groups = [azurerm_monitor_action_group.cost_alerts[0].id]
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 100
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Forecasted"
+    contact_emails = local.budget_alert_email_addresses
+    contact_groups = [azurerm_monitor_action_group.cost_alerts[0].id]
+  }
 }
 
 resource "azurerm_virtual_network" "main" {
@@ -39,11 +99,13 @@ resource "azurerm_virtual_network" "main" {
 }
 
 resource "azurerm_public_ip" "main" {
-  name                = "triptailor-pip"
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
+  name                    = "triptailor-pip"
+  location                = azurerm_resource_group.main.location
+  resource_group_name     = azurerm_resource_group.main.name
+  allocation_method       = "Static"
+  sku                     = "Standard"
+  domain_name_label       = var.public_ip_dns_label
+  idle_timeout_in_minutes = 4
 }
 
 resource "azurerm_network_security_group" "main" {

@@ -33,7 +33,13 @@ env:
   AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'polandcentral' }}
   AZURE_VM_SIZE: ${{ vars.AZURE_VM_SIZE || 'Standard_B2ats_v2' }}
   AZURE_VM_ADMIN_USERNAME: ${{ vars.AZURE_VM_ADMIN_USERNAME || 'tripadmin' }}
+  AZURE_PUBLIC_IP_DNS_LABEL: ${{ vars.AZURE_PUBLIC_IP_DNS_LABEL || 'tum-triptailor-354f93b6' }}
+  AZURE_ACME_EMAIL: ${{ vars.AZURE_ACME_EMAIL || 'f.hoppe@tum.de' }}
   AZURE_LLM_BASE_URL: ${{ vars.AZURE_LLM_BASE_URL || secrets.AZURE_LLM_BASE_URL }}
+  AZURE_MONTHLY_BUDGET_AMOUNT: ${{ vars.AZURE_MONTHLY_BUDGET_AMOUNT || '78' }}
+  AZURE_MONTHLY_BUDGET_START_DATE: ${{ vars.AZURE_MONTHLY_BUDGET_START_DATE || '2026-07-01T00:00:00Z' }}
+  AZURE_MONTHLY_BUDGET_END_DATE: ${{ vars.AZURE_MONTHLY_BUDGET_END_DATE || '2027-07-01T00:00:00Z' }}
+  AZURE_BUDGET_ALERT_EMAIL_ADDRESSES: ${{ vars.AZURE_BUDGET_ALERT_EMAIL_ADDRESSES || '' }}
 
 jobs:
   deploy:
@@ -92,7 +98,12 @@ jobs:
             -var="location=${AZURE_LOCATION}" \
             -var="vm_size=${AZURE_VM_SIZE}" \
             -var="admin_username=${AZURE_VM_ADMIN_USERNAME}" \
-            -var="ssh_public_key_path=$RUNNER_TEMP/ssh/triptailor.pub"
+            -var="public_ip_dns_label=${AZURE_PUBLIC_IP_DNS_LABEL}" \
+            -var="ssh_public_key_path=$RUNNER_TEMP/ssh/triptailor.pub" \
+            -var="monthly_budget_amount=${AZURE_MONTHLY_BUDGET_AMOUNT}" \
+            -var="monthly_budget_start_date=${AZURE_MONTHLY_BUDGET_START_DATE}" \
+            -var="monthly_budget_end_date=${AZURE_MONTHLY_BUDGET_END_DATE}" \
+            -var="budget_alert_email_addresses=${AZURE_BUDGET_ALERT_EMAIL_ADDRESSES}"
 
       - name: Terraform apply
         working-directory: infrastructure/terraform
@@ -104,7 +115,13 @@ jobs:
         working-directory: infrastructure/terraform
         run: |
           vm_public_ip="$(terraform output -raw vm_public_ip)"
+          vm_public_fqdn="$(terraform output -raw vm_public_fqdn)"
           echo "vm_public_ip=${vm_public_ip}" >> "$GITHUB_OUTPUT"
+          echo "vm_public_fqdn=${vm_public_fqdn}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure VM running
+        if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
+        run: az vm start --resource-group "${AZURE_RESOURCE_GROUP}" --name triptailor-vm
 
       - name: Install Ansible
         if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
@@ -148,6 +165,7 @@ jobs:
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          VM_PUBLIC_FQDN: ${{ steps.terraform_output.outputs.vm_public_fqdn }}
         run: |
           if [ -z "${AZURE_LLM_API_KEY}" ] || [ -z "${AZURE_LLM_BASE_URL}" ]; then
             echo "AZURE_LLM_API_KEY and AZURE_LLM_BASE_URL repository secrets are required." >&2
@@ -162,6 +180,8 @@ jobs:
             -e "branch=${GITHUB_REF_NAME}" \
             -e "azure_llm_api_key=${AZURE_LLM_API_KEY}" \
             -e "azure_llm_base_url=${AZURE_LLM_BASE_URL}" \
+            -e "public_hostname=${VM_PUBLIC_FQDN}" \
+            -e "acme_email=${AZURE_ACME_EMAIL}" \
             -e "serpapi_api_key=${SERPAPI_API_KEY}" \
             -e "postgres_password=${POSTGRES_PASSWORD}" \
             -e "jwt_secret=${JWT_SECRET}"
@@ -170,6 +190,9 @@ jobs:
         if: github.event.inputs.terraform_action != 'destroy' && (github.event_name == 'push' || github.event.inputs.deploy_after_apply == 'true')
         env:
           VM_PUBLIC_IP: ${{ steps.terraform_output.outputs.vm_public_ip }}
+          VM_PUBLIC_FQDN: ${{ steps.terraform_output.outputs.vm_public_fqdn }}
         run: |
-          echo "Frontend: http://${VM_PUBLIC_IP}:3000"
-          echo "Backend:  http://${VM_PUBLIC_IP}:8080"
+          echo "Frontend HTTPS: https://${VM_PUBLIC_FQDN}"
+          echo "Frontend HTTP fallback: http://${VM_PUBLIC_FQDN}:3000"
+          echo "Frontend IP fallback: http://${VM_PUBLIC_IP}:3000"
+          echo "Backend API: https://${VM_PUBLIC_FQDN}/api/"

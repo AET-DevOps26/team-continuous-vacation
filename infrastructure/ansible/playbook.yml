@@ -8,6 +8,8 @@
     branch: main
     swap_file: /swapfile
     swap_size_mb: 8192
+    public_hostname: localhost
+    acme_email: admin@example.com
 
   tasks:
     # --- Memory safety net: the VM has ~1 GiB RAM, but building the two Gradle
@@ -63,7 +65,7 @@
 
     - name: Install prerequisites
       apt:
-        name: [apt-transport-https, ca-certificates, curl, gnupg, lsb-release, git]
+        name: [apt-transport-https, ca-certificates, curl, gnupg, lsb-release, git, certbot]
         state: present
         update_cache: true
         cache_valid_time: 3600
@@ -141,6 +143,45 @@
         mode: "0600"
       no_log: true
 
+    - name: Stop gateway before certificate issuance
+      shell: docker compose -f docker-compose.yml -f docker-compose.azure.yml stop gateway || true
+      args:
+        chdir: "{{ app_dir }}"
+      changed_when: false
+      when: public_hostname != 'localhost'
+
+    - name: Request or renew TLS certificate
+      command: >
+        certbot certonly --standalone --non-interactive --agree-tos
+        --email {{ acme_email }}
+        --config-dir {{ app_dir }}/certbot/etc
+        --work-dir {{ app_dir }}/certbot/work
+        --logs-dir {{ app_dir }}/certbot/logs
+        --keep-until-expiring
+        -d {{ public_hostname }}
+      when: public_hostname != 'localhost'
+
+    - name: Configure HTTPS nginx gateway
+      template:
+        src: nginx-https.conf.j2
+        dest: "{{ app_dir }}/infrastructure/gateway/nginx.conf"
+        mode: "0644"
+      when: public_hostname != 'localhost'
+
+    - name: Configure Azure Docker Compose overrides
+      copy:
+        dest: "{{ app_dir }}/docker-compose.azure.yml"
+        content: |
+          services:
+            gateway:
+              ports:
+                - "80:80"
+                - "443:443"
+              volumes:
+                - ./certbot/etc:/etc/letsencrypt:ro
+        mode: "0644"
+      when: public_hostname != 'localhost'
+
     # Build images one service at a time. The default `up --build` builds every
     # service in parallel, so both Gradle JVMs (+ node) compile at once and blow
     # the memory budget. Serial builds keep only one heavy compile in flight, and
@@ -159,15 +200,33 @@
         - travel-context-service
 
     - name: Start services
+      shell: docker compose -f docker-compose.yml -f docker-compose.azure.yml up -d --force-recreate
+      args:
+        chdir: "{{ app_dir }}"
+      when: public_hostname != 'localhost'
+
+    - name: Start services locally
       shell: docker compose up -d --force-recreate
       args:
         chdir: "{{ app_dir }}"
+      when: public_hostname == 'localhost'
 
     - name: Wait for services
-      shell: docker compose ps
+      shell: docker compose -f docker-compose.yml -f docker-compose.azure.yml ps
       args:
         chdir: "{{ app_dir }}"
       register: compose_status
       retries: 6
       delay: 10
       until: compose_status.rc == 0
+      when: public_hostname != 'localhost'
+
+    - name: Wait for services locally
+      shell: docker compose ps
+      args:
+        chdir: "{{ app_dir }}"
+      register: compose_status_local
+      retries: 6
+      delay: 10
+      until: compose_status_local.rc == 0
+      when: public_hostname == 'localhost'
