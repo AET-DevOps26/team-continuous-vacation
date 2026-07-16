@@ -23,8 +23,10 @@ from app.metrics import (
     CACHE_REQUESTS_TOTAL,
     EVENTS_RETURNED,
     PROVIDER_DURATION_SECONDS,
+    PROVIDER_FAILURES_TOTAL,
     PROVIDER_REQUESTS_TOTAL,
     WEATHER_DAYS_RETURNED,
+    provider_failure_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -177,6 +179,9 @@ class TravelContextService:
             ).inc()
         except Exception as error:
             PROVIDER_REQUESTS_TOTAL.labels(provider="nominatim", outcome="error").inc()
+            PROVIDER_FAILURES_TOTAL.labels(
+                provider="nominatim", reason=provider_failure_reason(error)
+            ).inc()
             logger.warning(
                 "Nominatim geocoding failed destination=%s error=%s; trying Photon fallback",
                 destination,
@@ -188,8 +193,11 @@ class TravelContextService:
                 PROVIDER_REQUESTS_TOTAL.labels(
                     provider="photon", outcome="success"
                 ).inc()
-            except Exception:
+            except Exception as error:
                 PROVIDER_REQUESTS_TOTAL.labels(provider="photon", outcome="error").inc()
+                PROVIDER_FAILURES_TOTAL.labels(
+                    provider="photon", reason=provider_failure_reason(error)
+                ).inc()
                 raise
         logger.info(
             "Geocoded destination=%s name=%s display_name=%r country_code=%s lat=%s lon=%s",
@@ -257,6 +265,9 @@ class TravelContextService:
             PROVIDER_REQUESTS_TOTAL.labels(
                 provider="serpapi_events", outcome="error"
             ).inc()
+            PROVIDER_FAILURES_TOTAL.labels(
+                provider="serpapi_events", reason=provider_failure_reason(error)
+            ).inc()
             logger.warning(
                 "Event lookup failed location=%s country_code=%s error_type=%s",
                 location_name,
@@ -319,6 +330,9 @@ class TravelContextService:
             ).inc()
         except Exception as error:
             PROVIDER_REQUESTS_TOTAL.labels(provider="open_meteo", outcome="error").inc()
+            PROVIDER_FAILURES_TOTAL.labels(
+                provider="open_meteo", reason=provider_failure_reason(error)
+            ).inc()
             # Weather is a best-effort enhancement; never fail the whole context.
             logger.warning(
                 "Weather lookup failed lat=%s lon=%s start=%s end=%s error=%s",

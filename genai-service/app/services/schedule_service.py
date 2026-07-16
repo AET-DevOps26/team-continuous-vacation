@@ -22,7 +22,7 @@ from app.models.schemas import (
     Schedule,
 )
 from app.config.settings import settings
-from app.services.llm.base import LLMGenerationOptions, LLMProvider
+from app.services.llm.base import LLMGenerationOptions, LLMProvider, LLMProviderError
 from app.services.llm.factory import LLMProviderFactory
 from app.services.prompts.schedule_prompts import (
     get_alternative_activity_prompt,
@@ -172,7 +172,7 @@ class ScheduleService:
         )
         try:
             response_text = await self._call_llm(prompt)
-        except Exception as error:
+        except LLMProviderError as error:
             logger.warning(
                 "Alternative activity LLM call failed; using deterministic fallback: %s",
                 error,

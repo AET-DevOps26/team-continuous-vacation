@@ -3,10 +3,10 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError
 
 from app.models.schemas import GenerationPreferences
-from app.services.llm.base import LLMGenerationOptions, LLMProvider
+from app.services.llm.base import LLMGenerationOptions, LLMProvider, LLMProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ class ContextRelevanceClassifier:
                 source="ai",
                 reason=reason,
             )
-        except Exception as error:
+        except (LLMProviderError, json.JSONDecodeError, ValidationError) as error:
             logger.warning(
                 "AI context relevance classification failed destination=%s error=%s; defaulting to events context",
                 preferences.destination,

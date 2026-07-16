@@ -1,3 +1,4 @@
+import pytest
 from prometheus_client import REGISTRY, generate_latest
 
 from app.models.schemas import (
@@ -117,6 +118,18 @@ async def test_context_service_uses_photon_fallback_when_nominatim_fails():
         'travel_context_provider_requests_total{outcome="success",provider="photon"}'
         in metrics
     )
+
+
+async def test_context_service_propagates_double_geocoder_failure():
+    service = TravelContextService(
+        geocoder=FailingGeocoder(),
+        fallback_geocoder=FailingGeocoder(),
+        geocode_cache=TtlCache(60),
+        events_cache=TtlCache(60),
+    )
+
+    with pytest.raises(RuntimeError, match="blocked"):
+        await service._geocode("Unknown destination")
 
 
 async def test_context_service_reuses_geocode_cache():

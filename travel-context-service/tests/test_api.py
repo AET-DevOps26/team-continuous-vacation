@@ -130,6 +130,26 @@ def test_trip_context_endpoint_rejects_reversed_dates():
     assert response.status_code == 422
 
 
+def test_trip_context_rejects_oversized_and_extra_fields():
+    request = {
+        "destination": "M" * 201,
+        "startDate": "2026-06-01",
+        "endDate": "2026-06-05",
+        "vibe": "cultural",
+    }
+    assert client.post("/trip-context", json=request).status_code == 422
+
+    request["destination"] = "Munich"
+    request["unexpected"] = True
+    assert client.post("/trip-context", json=request).status_code == 422
+
+
+def test_internal_api_does_not_emit_cors_headers():
+    response = client.get("/health", headers={"Origin": "https://evil.example"})
+
+    assert "access-control-allow-origin" not in response.headers
+
+
 async def test_default_dependency_reuses_and_closes_service():
     get_travel_context_service.cache_clear()
 

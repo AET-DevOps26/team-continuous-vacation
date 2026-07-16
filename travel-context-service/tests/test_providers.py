@@ -4,10 +4,12 @@ import httpx
 import pytest
 
 from app.models.schemas import Coordinates
-from app.services.providers.nominatim_provider import NominatimProvider
+from app.services.providers.nominatim_provider import GeocodingError, NominatimProvider
 from app.services.providers.open_meteo_provider import (
     OpenMeteoWeatherProvider,
+    _bucket_hourly,
     _historical_reference,
+    _wmo,
 )
 from app.services.providers.photon_provider import PhotonProvider
 from app.services.providers.serpapi_events_provider import SerpApiEventsProvider, _map_event
@@ -63,6 +65,22 @@ async def test_nominatim_rate_limit_error_propagates(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_nominatim_rejects_invalid_json(monkeypatch):
+    async def fake_get(self, url, params=None, headers=None):
+        return httpx.Response(
+            200,
+            text="not-json",
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    provider = NominatimProvider("https://nominatim.example", "test-agent")
+
+    with pytest.raises(ValueError):
+        await provider.geocode("Munich")
+
+
+@pytest.mark.asyncio
 async def test_photon_response_maps_to_coordinates(monkeypatch):
     async def fake_get(self, url, params=None, headers=None):
         return httpx.Response(
@@ -89,6 +107,22 @@ async def test_photon_response_maps_to_coordinates(monkeypatch):
     assert location.countryCode == "de"
     assert location.coordinates.lat == 48.137154
     assert location.coordinates.lon == 11.576124
+
+
+@pytest.mark.asyncio
+async def test_photon_rejects_missing_coordinates(monkeypatch):
+    async def fake_get(self, url, params=None, headers=None):
+        return httpx.Response(
+            200,
+            json={"features": [{"geometry": {}, "properties": {"name": "X"}}]},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    provider = PhotonProvider("https://photon.example", "test-agent")
+
+    with pytest.raises(GeocodingError, match="did not include coordinates"):
+        await provider.geocode("X")
 
 
 @pytest.mark.asyncio
@@ -395,3 +429,21 @@ def test_historical_reference_uses_actual_past_date_and_safe_future_year():
 
     assert _historical_reference(date(2025, 5, 1), today) == date(2025, 5, 1)
     assert _historical_reference(date(2028, 7, 1), today) == date(2025, 7, 1)
+
+
+def test_weather_parser_handles_unknown_codes_and_mismatched_arrays():
+    assert _wmo(999) == ("Unknown", 0)
+
+    buckets = _bucket_hourly(
+        {
+            "time": ["2026-06-01T08:00", "2026-06-01T09:00"],
+            "temperature_2m": [12.0],
+            "precipitation": [],
+            "weather_code": [999, 0],
+        }
+    )
+
+    records = buckets[date(2026, 6, 1)]
+    assert records[0]["temperature"] == 12.0
+    assert records[1]["temperature"] is None
+    assert records[0]["precipitation"] == 0.0

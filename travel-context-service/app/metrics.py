@@ -5,7 +5,9 @@ These metrics complement the auto-instrumented FastAPI request metrics with
 provider, cache, and response-shape signals for the context enrichment flow.
 """
 
+import httpx
 from prometheus_client import Counter, Histogram
+from pydantic import ValidationError
 
 PROVIDER_REQUESTS_TOTAL = Counter(
     "travel_context_provider_requests_total",
@@ -18,6 +20,31 @@ PROVIDER_DURATION_SECONDS = Histogram(
     "Duration of external provider calls made by the Travel Context service.",
     labelnames=("provider",),
 )
+
+PROVIDER_FAILURES_TOTAL = Counter(
+    "travel_context_provider_failures_total",
+    "External provider failures grouped by actionable reason.",
+    labelnames=("provider", "reason"),
+)
+
+
+def provider_failure_reason(error: Exception) -> str:
+    """Map provider failures to stable, low-cardinality metric labels."""
+    if isinstance(error, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        if status == 429:
+            return "rate_limit"
+        if 400 <= status < 500:
+            return "permanent"
+        return "upstream"
+    if isinstance(error, (ValidationError, ValueError)):
+        return "validation"
+    if isinstance(error, httpx.RequestError):
+        return "network"
+    return "unexpected"
+
 
 CACHE_REQUESTS_TOTAL = Counter(
     "travel_context_cache_requests_total",

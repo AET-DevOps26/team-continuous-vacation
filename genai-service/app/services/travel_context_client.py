@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 import httpx
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app.config.settings import settings
 from app.models.schemas import GenerationPreferences
@@ -121,7 +121,7 @@ class TravelContextClient:
                 )
                 response.raise_for_status()
                 return TravelContext.model_validate(response.json())
-        except Exception as error:
+        except (httpx.HTTPError, ValueError, ValidationError) as error:
             logger.warning(
                 "Travel context lookup failed destination=%s error=%s",
                 preferences.destination,
