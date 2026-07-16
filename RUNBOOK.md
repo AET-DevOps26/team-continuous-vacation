@@ -86,7 +86,6 @@ cd /opt/triptailor
 
 docker compose ps
 docker compose exec gateway wget -qO- http://backend:8080/health
-docker compose exec gateway wget -qO- http://persistence-service:8081/health
 docker compose exec gateway wget -qO- http://genai-service:8000/health
 curl -fsS http://localhost:8090/health
 curl -fsS http://localhost:3200/ready
@@ -206,13 +205,13 @@ Run demo scripts:
 | [4. Local Quick Start With Docker Compose](#4-local-quick-start-with-docker-compose) | Local prerequisites, environment files, startup, smoke tests, and reset commands. |
 | [5. Manual API Demo](#5-manual-api-demo) | cURL-based demo flow through the gateway. |
 | [6. Runtime Request Flows](#6-runtime-request-flows) | Auth, trip generation, and activity regeneration sequences. |
-| [7. Public and Internal APIs](#7-public-and-internal-apis) | Backend, persistence, GenAI, and travel-context endpoint maps. |
+| [7. Public and Internal APIs](#7-public-and-internal-apis) | Backend, GenAI, and travel-context endpoint maps. |
 | [8. Data Model](#8-data-model) | Database tables and domain objects. |
 | [9. GenAI Behavior](#9-genai-behavior) | LLM provider setup, prompts, validation, and failure behavior. |
 | [10. Travel Context Behavior](#10-travel-context-behavior) | Geocoding, events, weather, and caching. |
 | [11. Frontend Behavior](#11-frontend-behavior) | Frontend routing, API provider, and auth storage. |
 | [12. Backend Service Details](#12-backend-service-details) | Security, JWTs, metrics, and tracing. |
-| [13. Persistence Service Details](#13-persistence-service-details) | Database service configuration and ownership. |
+| [13. Database Details](#13-database-details) | Database configuration, schema initialization, and ownership. |
 | [14. Observability](#14-observability) | Metrics, dashboards, traces, alerts, and validation. |
 | [15. Validation and Tests](#15-validation-and-tests) | Commands for frontend, Kotlin services, Python services, and full stack checks. |
 | [16. CI/CD](#16-cicd) | GitHub Actions workflows for CI, images, AET, and Azure VM deployment. |
@@ -239,8 +238,7 @@ The system is built as a small microservice application:
 | --- | --- | --- | --- |
 | Gateway | `infrastructure/gateway/nginx.conf` | NGINX | Single browser entrypoint. Routes `/` to frontend, `/api/*` to backend, `/grafana/` to Grafana, and `/prometheus/` to Prometheus. |
 | Frontend | `frontend/` | React 19, Vite, Refine, shadcn-style UI | User interface for login/demo session, trip list, trip creation, trip details, activity regeneration, and deletion. |
-| Backend API | `backend/` | Kotlin, Spring Boot | Public backend-for-frontend. Owns authentication, JWT validation, API validation, orchestration, metrics, and traces. |
-| Persistence Service | `persistence-service/` | Kotlin, Spring Boot, JDBC | Internal database API. Owns all SQL and PostgreSQL access. |
+| Backend API | `backend/` | Kotlin, Spring Boot, JDBC | Public backend-for-frontend. Owns authentication, JWT validation, API validation, orchestration, all SQL/PostgreSQL access, metrics, and traces. |
 | GenAI Service | `genai-service/` | Python, FastAPI | Internal AI service. Builds prompts, calls Azure/OpenAI-compatible LLM, validates structured output, assigns IDs. |
 | Travel Context Service | `travel-context-service/` | Python, FastAPI | Internal enrichment service. Fetches geocoding, weather, and optional events. Caches provider responses. |
 | Database | Docker Compose / Helm | PostgreSQL 17 | Stores travelers, trips, days, activities, and activity tags. |
@@ -258,13 +256,13 @@ Important root-level files and directories:
 | --- | --- |
 | `README.md` | Main project overview and architecture summary. |
 | `RUNBOOK.md` | This evaluator-facing runbook. |
-| `docker-compose.yml` | Full local stack: gateway, frontend, backend, persistence, GenAI, travel context, Postgres, Prometheus, Tempo, Grafana. |
+| `docker-compose.yml` | Full local stack: gateway, frontend, backend, GenAI, travel context, Postgres, Prometheus, Tempo, Grafana. |
 | `start.sh` | Local Kubernetes helper that builds missing images and installs the Helm chart. |
 | `scripts/docker-compose-smoke.sh` | Smoke test for the Docker Compose stack. |
 | `scripts/demo-load-balancing.sh` | Demonstrates Kubernetes service-level load balancing for backend replicas. |
 | `scripts/demo-autoscaling.sh` | Demonstrates backend HPA behavior. |
 | `scripts/demo-tracing.sh` | Demonstrates distributed tracing. |
-| `api-specification/` | OpenAPI contracts for frontend, persistence, GenAI, and travel-context boundaries. |
+| `api-specification/` | OpenAPI contracts for frontend, GenAI, and travel-context boundaries. |
 | `diagrams/` | PlantUML architecture, use-case, flow, and object model diagrams. |
 | `infrastructure/kubernetes/triptailor/` | Helm chart for Kubernetes deployment. |
 | `infrastructure/terraform/` | Azure VM provisioning. |
@@ -279,15 +277,15 @@ The user-facing product supports these workflows:
 
 | Workflow | User action | System behavior |
 | --- | --- | --- |
-| Demo access | User opens the app and starts without registration. | Frontend calls `POST /auth/demo`; backend creates a demo traveler through persistence and returns a JWT. |
+| Demo access | User opens the app and starts without registration. | Frontend calls `POST /auth/demo`; backend creates a demo traveler in the database and returns a JWT. |
 | Registration | User enters email and password. | Backend hashes password with BCrypt, creates traveler, and returns a JWT. |
-| Login | User enters email and password. | Backend fetches auth record from persistence, verifies BCrypt password, and returns a JWT. |
-| Trip generation | User enters destination, dates, and vibe. | Backend validates dates, calls GenAI for a schedule, saves the trip through persistence, and returns the full trip. |
+| Login | User enters email and password. | Backend fetches the auth record from the database, verifies BCrypt password, and returns a JWT. |
+| Trip generation | User enters destination, dates, and vibe. | Backend validates dates, calls GenAI for a schedule, saves the trip to the database, and returns the full trip. |
 | Trip list | User opens dashboard. | Frontend calls `GET /trips`; backend returns summaries owned by the authenticated traveler. |
 | Trip details | User opens a trip. | Frontend calls `GET /trips/{tripId}`; backend returns the full schedule. |
 | Activity regeneration | User edits one activity with a text instruction. | Backend fetches the whole trip, asks GenAI for one replacement, persists only that activity, and returns it. |
-| Activity deletion | User deletes one card. | Backend verifies ownership by fetching the trip, then persistence deletes the activity. |
-| Trip deletion | User deletes a trip. | Persistence deletes the trip; SQL cascading deletes days, activities, and tags. |
+| Activity deletion | User deletes one card. | Backend verifies ownership by fetching the trip, then deletes the activity. |
+| Trip deletion | User deletes a trip. | Backend deletes the trip; SQL cascading deletes days, activities, and tags. |
 
 The central design goal is structured itinerary data. The GenAI output is not
 stored as plain text. It is validated into days and activities with fields such
@@ -375,7 +373,6 @@ Internal-only service names inside Compose:
 | Service | Internal URL |
 | --- | --- |
 | Backend | `http://backend:8080` |
-| Persistence | `http://persistence-service:8081` |
 | GenAI | `http://genai-service:8000` |
 | Travel context | `http://travel-context-service:8090` |
 | Postgres | `db:5432` |
@@ -394,7 +391,6 @@ The script checks:
 | --- | --- |
 | Frontend through gateway | `http://localhost:3000/` |
 | Backend through gateway | `http://localhost:3000/api/health` |
-| Persistence from Compose network | `http://persistence-service:8081/health` |
 | GenAI from Compose network | `http://genai-service:8000/health` |
 | Travel context from host | `http://localhost:8090/health` |
 | Prometheus through gateway | `http://localhost:3000/prometheus/-/healthy` |
@@ -508,21 +504,20 @@ Expected status: `204 No Content`.
 3. If absent, the login page can create a demo session.
 4. Frontend calls `POST /api/auth/demo`.
 5. Gateway strips `/api/` and forwards to backend `POST /auth/demo`.
-6. Backend calls persistence `POST /travelers` with `isDemo: true`.
-7. Persistence inserts a row into `travelers`.
-8. Backend signs an HS256 JWT with the traveler UUID as `sub`.
-9. Frontend stores `access_token`, `traveler_id`, and `is_demo` in local storage.
+6. Backend inserts a demo row into `travelers` (`isDemo: true`).
+7. Backend signs an HS256 JWT with the traveler UUID as `sub`.
+8. Frontend stores `access_token`, `traveler_id`, and `is_demo` in local storage.
 
 ### 6.2 Registered Login Flow
 
 1. Frontend calls `POST /api/auth/login` with email and password.
-2. Backend calls persistence `GET /travelers/auth-record?email=...`.
-3. Persistence returns email, password hash, traveler ID, demo flag, and created timestamp.
+2. Backend loads the traveler auth record from the `travelers` table by email.
+3. The record provides email, password hash, traveler ID, demo flag, and created timestamp.
 4. Backend verifies the submitted password with BCrypt.
 5. Backend returns a signed JWT.
 
-Security detail: the auth-record endpoint is internal and must not be exposed
-publicly, because it returns password hashes for backend verification.
+Security detail: the password hash is read only inside the backend for
+verification and is never returned to clients.
 
 ### 6.3 Trip Generation Flow
 
@@ -547,17 +542,16 @@ publicly, because it returns password hashes for backend verification.
 12. GenAI builds the schedule prompt with trip preferences, real events, and weather.
 13. GenAI calls the configured LLM provider.
 14. GenAI parses JSON, sanitizes activity tags, validates the schedule contract, and assigns UUIDs.
-15. Backend creates a trip ID and calls persistence `POST /trips?travelerId=...`.
-16. Persistence inserts `trips`, `days`, `activities`, and `activity_tags` in one transaction.
-17. Backend returns the saved trip to the frontend.
-18. Frontend navigates to the trip detail page.
+15. Backend creates a trip ID and inserts `trips`, `days`, `activities`, and `activity_tags` in one transaction.
+16. Backend returns the saved trip to the frontend.
+17. Frontend navigates to the trip detail page.
 
 ### 6.4 Activity Regeneration Flow
 
 1. User opens an activity card and enters an instruction.
 2. Frontend calls `PATCH /api/trips/{tripId}/days/{dayId}/activities/{activityId}`.
 3. Backend authenticates the JWT.
-4. Backend fetches the full trip from persistence to verify ownership and get context.
+4. Backend loads the full trip from the database to verify ownership and get context.
 5. Backend locates the target activity in the returned schedule.
 6. Backend calls GenAI `POST /activities/alternative` with:
    - user instruction
@@ -567,11 +561,10 @@ publicly, because it returns password hashes for backend verification.
 8. GenAI calls the LLM.
 9. GenAI validates that the replacement title is not the old title and does not duplicate any other trip activity.
 10. GenAI assigns a new activity UUID and keeps the original day ID.
-11. Backend calls persistence `PUT /trips/{tripId}/days/{dayId}/activities/{activityId}`.
-12. Persistence verifies that the old activity belongs to the trip and day.
-13. Persistence deletes old activity tags, deletes the old activity row, inserts the replacement activity, and inserts replacement tags.
-14. Backend returns the replacement activity.
-15. Frontend refetches the trip to display the updated schedule.
+11. Backend verifies that the old activity belongs to the trip and day.
+12. Backend deletes old activity tags, deletes the old activity row, inserts the replacement activity, and inserts replacement tags in one transaction.
+13. Backend returns the replacement activity.
+14. Frontend refetches the trip to display the updated schedule.
 
 ## 7. Public and Internal APIs
 
@@ -580,12 +573,8 @@ OpenAPI specifications live in `api-specification/`.
 | Contract | File | Runtime owner |
 | --- | --- | --- |
 | Public frontend/backend API | `api-specification/frontend.yaml` | Backend API |
-| Internal persistence API | `api-specification/persistance.yaml` | Persistence service |
 | Internal GenAI API | `api-specification/gen-ai.yaml` | GenAI service |
 | Internal travel context API | `api-specification/travel-context.yaml` | Travel context service |
-
-Note: `persistance.yaml` is intentionally misspelled for compatibility with
-existing build scripts.
 
 ### 7.1 Backend Public Endpoints
 
@@ -609,27 +598,7 @@ use the path without `/api`.
 | `DELETE` | `/trips/{tripId}/days/{dayId}/activities/{activityId}` | yes | Delete one activity. |
 | `GET` | `/debug/instance` | no | Debug endpoint used to demonstrate load balancing. |
 
-### 7.2 Persistence Endpoints
-
-These are internal. They are reachable inside Compose/Kubernetes through
-`persistence-service:8081`.
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/health` | Health. |
-| `GET` | `/actuator/prometheus` | Metrics. |
-| `POST` | `/travelers` | Create demo or registered traveler. |
-| `GET` | `/travelers?email=...` | Find non-sensitive traveler profile by email. |
-| `GET` | `/travelers/auth-record?email=...` | Find login auth record, including password hash. |
-| `GET` | `/travelers/{travelerId}` | Get traveler by UUID. |
-| `GET` | `/trips?travelerId=...` | List trip summaries. |
-| `POST` | `/trips?travelerId=...` | Save full trip. |
-| `GET` | `/trips/{tripId}?travelerId=...` | Get full trip owned by traveler. |
-| `DELETE` | `/trips/{tripId}?travelerId=...` | Delete trip owned by traveler. |
-| `PUT` | `/trips/{tripId}/days/{dayId}/activities/{activityId}` | Replace one activity. |
-| `DELETE` | `/trips/{tripId}/days/{dayId}/activities/{activityId}` | Delete one activity. |
-
-### 7.3 GenAI Endpoints
+### 7.2 GenAI Endpoints
 
 These are internal. They are reachable inside Compose/Kubernetes through
 `genai-service:8000`.
@@ -641,7 +610,7 @@ These are internal. They are reachable inside Compose/Kubernetes through
 | `POST` | `/schedules` | Generate complete schedule from preferences. |
 | `POST` | `/activities/alternative` | Generate one replacement activity. |
 
-### 7.4 Travel Context Endpoints
+### 7.3 Travel Context Endpoints
 
 The service is internal in Kubernetes but also exposed on host port `8090` in
 Docker Compose for debugging.
@@ -655,7 +624,7 @@ Docker Compose for debugging.
 ## 8. Data Model
 
 The database schema is defined in
-`persistence-service/src/main/resources/schema.sql`.
+`backend/src/main/resources/schema.sql`.
 
 ### 8.1 Tables
 
@@ -683,9 +652,9 @@ OpenAPI schemas:
 | `TimeBlock` | `MORNING`, `NOON`, `AFTERNOON`, `EVENING`, `NIGHT`. |
 | `ActivityTag` | `OUTDOOR`, `INDOOR`, `CULTURAL`, `SPORTY`, `RELAXING`, `ADVENTUROUS`, `FOOD`, `SHOPPING`, `ENTERTAINMENT`, `FAMILY_FRIENDLY`, `PARTY`. |
 
-### 8.3 Persistence Behavior
+### 8.3 Data Access Behavior
 
-Important repository behavior:
+Important repository behavior (`backend/.../repository/TripTailorRepository.kt`):
 
 | Behavior | Implementation detail |
 | --- | --- |
@@ -900,11 +869,12 @@ Tracing is enabled through Spring Boot OpenTelemetry when
 `OTEL_TRACES_SAMPLER_ARG` is greater than zero and `TRACING_OTLP_ENDPOINT` points
 to Tempo.
 
-## 13. Persistence Service Details
+## 13. Database Details
 
-The persistence service is intentionally simple. It exposes an internal REST API
-and uses `NamedParameterJdbcTemplate` for SQL. It is the only application
-service that should talk to PostgreSQL.
+The backend owns all PostgreSQL access. Data access lives in
+`backend/.../repository/TripTailorRepository.kt` and uses
+`NamedParameterJdbcTemplate` for SQL. The backend is the only application
+service that talks to PostgreSQL.
 
 Important configuration:
 
@@ -913,9 +883,9 @@ Important configuration:
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5433/triptailor` |
 | `SPRING_DATASOURCE_USERNAME` | `tripuser` |
 | `SPRING_DATASOURCE_PASSWORD` | `trippassword` |
-| `server.port` | `8081` |
 
-SQL schema initialization runs on startup with `spring.sql.init.mode=always`.
+SQL schema initialization runs on backend startup with
+`spring.sql.init.mode=always` from `backend/src/main/resources/schema.sql`.
 
 ## 14. Observability
 
@@ -924,7 +894,6 @@ SQL schema initialization runs on startup with `spring.sql.init.mode=always`.
 | Service | Metrics endpoint |
 | --- | --- |
 | Backend | `/actuator/prometheus` |
-| Persistence service | `/actuator/prometheus` |
 | GenAI service | `/metrics` |
 | Travel context service | `/metrics` |
 
@@ -1052,17 +1021,7 @@ cd backend
 ./gradlew test
 ```
 
-### 15.3 Persistence Service
-
-```bash
-cd persistence-service
-./gradlew build
-```
-
-This includes compile, tests, Detekt, JaCoCo, and the 80 percent coverage gate.
-It copies `api-specification/persistance.yaml` into resources as `openapi.yaml`.
-
-### 15.4 GenAI Service
+### 15.3 GenAI Service
 
 ```bash
 cd genai-service
@@ -1075,7 +1034,7 @@ mypy app
 pytest --verbose --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=80
 ```
 
-### 15.5 Travel Context Service
+### 15.4 Travel Context Service
 
 ```bash
 cd travel-context-service
@@ -1088,7 +1047,7 @@ mypy app
 pytest --verbose --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=80
 ```
 
-### 15.6 Full Stack Validation
+### 15.5 Full Stack Validation
 
 ```bash
 docker compose config --quiet
@@ -1116,7 +1075,6 @@ Jobs:
 | --- | --- |
 | `build-frontend` | Node 20, `npm ci`, lint, tests, coverage, build. |
 | `build-backend` | Java 21, `./gradlew build`, coverage artifact. |
-| `build-persistence-service` | Java 21, `./gradlew build`, coverage artifact. |
 | `build-genai` | Python 3.11, flake8, mypy, pytest coverage with 80 percent gate. |
 | `build-travel-context` | Python 3.11, flake8, mypy, pytest coverage with 80 percent gate. |
 | `coverage-report` | Downloads all coverage artifacts and verifies 80 percent line coverage per service. |
@@ -1128,12 +1086,11 @@ Coverage summary generation is implemented in `scripts/coverage-report.mjs`.
 
 Workflow: `.github/workflows/images.yaml`
 
-It builds and publishes five images to GitHub Container Registry:
+It builds and publishes four images to GitHub Container Registry:
 
 | Image |
 | --- |
 | `ghcr.io/aet-devops26/team-continuous-vacation/backend:<sha>` |
-| `ghcr.io/aet-devops26/team-continuous-vacation/persistence-service:<sha>` |
 | `ghcr.io/aet-devops26/team-continuous-vacation/genai-service:<sha>` |
 | `ghcr.io/aet-devops26/team-continuous-vacation/travel-context-service:<sha>` |
 | `ghcr.io/aet-devops26/team-continuous-vacation/frontend:<sha>` |
@@ -1189,7 +1146,6 @@ What `start.sh` does:
 3. Verifies a current Kubernetes context exists.
 4. Builds local images if missing:
    - `triptailor/backend:latest`
-   - `triptailor/persistence-service:latest`
    - `triptailor/genai-service:latest`
    - `triptailor/travel-context-service:latest`
    - `triptailor/frontend:latest`
@@ -1218,7 +1174,6 @@ Build images:
 
 ```bash
 docker build -t triptailor/backend:latest --build-context api-spec=api-specification backend
-docker build -t triptailor/persistence-service:latest --build-context api-spec=api-specification persistence-service
 docker build -t triptailor/genai-service:latest genai-service
 docker build -t triptailor/travel-context-service:latest travel-context-service
 docker build -t triptailor/frontend:latest --build-context api-spec=api-specification frontend
@@ -1237,7 +1192,6 @@ Check rollout:
 
 ```bash
 kubectl -n triptailor-local rollout status deploy/db
-kubectl -n triptailor-local rollout status deploy/persistence-service
 kubectl -n triptailor-local rollout status deploy/travel-context-service
 kubectl -n triptailor-local rollout status deploy/genai-service
 kubectl -n triptailor-local rollout status deploy/backend
@@ -1264,7 +1218,6 @@ The Helm chart uses service names that match Docker Compose:
 | Service | Port |
 | --- | --- |
 | `db` | `5432` |
-| `persistence-service` | `8081` |
 | `travel-context-service` | `8090` |
 | `genai-service` | `8000` |
 | `backend` | `8080` |
@@ -1489,8 +1442,7 @@ Expected Compose services:
 | --- | --- | --- |
 | `gateway` | `triptailor-gateway` | Public NGINX gateway on VM port `3000`. |
 | `frontend` | `triptailor-frontend` | Internal React static frontend server. |
-| `backend` | `triptailor-backend` | Internal public API service behind gateway `/api/*`. |
-| `persistence-service` | `triptailor-persistence` | Internal database API. |
+| `backend` | `triptailor-backend` | Internal public API service behind gateway `/api/*`; owns PostgreSQL access. |
 | `genai-service` | `triptailor-genai` | Internal LLM schedule service. |
 | `travel-context-service` | `triptailor-travel-context` | Travel context API; host port `8090` in Compose, but not opened by the default Azure NSG. |
 | `db` | `triptailor-db` | PostgreSQL. |
@@ -1556,7 +1508,7 @@ Public URLs exposed through the Azure VM gateway:
 | Grafana | `http://<AZURE_VM_PUBLIC_IP>:3000/grafana/` | Dashboard UI for metrics and traces. |
 | Grafana health | `http://<AZURE_VM_PUBLIC_IP>:3000/grafana/api/health` | Verifies Grafana through the gateway. |
 | Prometheus | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/` | Prometheus UI through the gateway. |
-| Prometheus targets | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/targets` | Shows scrape status for backend, persistence, GenAI, and travel-context services. |
+| Prometheus targets | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/targets` | Shows scrape status for backend, GenAI, and travel-context services. |
 | Prometheus alerts | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/alerts` | Shows alert rule state. |
 
 Example:
@@ -1573,7 +1525,6 @@ URLs:
 | Service | Public Azure URL | How to reach it |
 | --- | --- | --- |
 | Backend container | No direct public `:8080` URL in the default deployment. | Use gateway URLs under `http://<AZURE_VM_PUBLIC_IP>:3000/api/*`, or SSH into the VM and call `http://backend:8080` from the Compose network. |
-| Persistence service | No public URL. | SSH into the VM and call it from the Compose network, for example `docker compose exec gateway wget -qO- http://persistence-service:8081/health`. |
 | GenAI service | No public URL. | SSH into the VM and call it from the Compose network, for example `docker compose exec gateway wget -qO- http://genai-service:8000/health`. |
 | Travel context service | Not public through the default NSG. | SSH into the VM and use `curl http://localhost:8090/health`, or call `http://travel-context-service:8090/health` from the Compose network. |
 | Tempo | No public UI. | SSH into the VM and check `curl http://localhost:3200/ready`; traces are viewed in Grafana. |
@@ -1587,7 +1538,6 @@ cd /opt/triptailor
 
 docker compose ps
 docker compose exec gateway wget -qO- http://backend:8080/health
-docker compose exec gateway wget -qO- http://persistence-service:8081/health
 docker compose exec gateway wget -qO- http://genai-service:8000/health
 curl -fsS http://localhost:8090/health
 curl -fsS http://localhost:3200/ready
@@ -1667,7 +1617,6 @@ Docker Compose:
 ```bash
 docker compose ps
 docker compose logs backend
-docker compose logs persistence-service
 docker compose logs genai-service
 docker compose logs travel-context-service
 docker compose logs gateway
@@ -1791,7 +1740,6 @@ Check:
 | Target | Expected endpoint |
 | --- | --- |
 | `backend` | `backend:8080/actuator/prometheus` |
-| `persistence-service` | `persistence-service:8081/actuator/prometheus` |
 | `genai-service` | `genai-service:8000/metrics` |
 | `travel-context-service` | `travel-context-service:8090/metrics` |
 
@@ -1820,8 +1768,7 @@ Common causes:
 | Pod | Likely cause |
 | --- | --- |
 | `genai-service` | Missing/invalid LLM configuration. |
-| `persistence-service` | Cannot connect to Postgres or database secret mismatch. |
-| `backend` | Persistence or GenAI unavailable, invalid JWT secret too short. |
+| `backend` | Cannot connect to Postgres, database secret mismatch, GenAI unavailable, or invalid JWT secret too short. |
 | `frontend` | Image build issue or nginx config issue. |
 | `prometheus` | Invalid Prometheus config or rules. |
 
@@ -1899,9 +1846,8 @@ Recommended code-reading order:
 | Backend auth | `backend/src/main/kotlin/com/vacation/app/controller/AuthController.kt`, `backend/src/main/kotlin/com/vacation/app/service/AuthService.kt`, `backend/src/main/kotlin/com/vacation/app/service/TokenService.kt` |
 | Backend security | `backend/src/main/kotlin/com/vacation/app/config/SecurityConfig.kt` |
 | Backend trip orchestration | `backend/src/main/kotlin/com/vacation/app/controller/TripController.kt`, `backend/src/main/kotlin/com/vacation/app/service/TripService.kt` |
-| Backend service clients | `backend/src/main/kotlin/com/vacation/app/client/HttpPersistenceClient.kt`, `backend/src/main/kotlin/com/vacation/app/client/HttpGenAiClient.kt` |
-| Persistence controllers | `persistence-service/src/main/kotlin/com/vacation/persistence/controller/*.kt` |
-| Persistence SQL/repository | `persistence-service/src/main/resources/schema.sql`, `persistence-service/src/main/kotlin/com/vacation/persistence/repository/TripTailorRepository.kt` |
+| Backend service clients | `backend/src/main/kotlin/com/vacation/app/client/HttpGenAiClient.kt` |
+| Backend SQL/repository | `backend/src/main/resources/schema.sql`, `backend/src/main/kotlin/com/vacation/app/repository/TripTailorRepository.kt` |
 | GenAI routes and service | `genai-service/app/api/routes/schedules.py`, `genai-service/app/services/schedule_service.py` |
 | GenAI prompts | `genai-service/app/services/prompts/schedule_prompts.py` |
 | LLM provider integration | `genai-service/app/services/llm/*.py` |
@@ -1919,7 +1865,7 @@ Recommended code-reading order:
 | Demo users | Demo travelers are stored in the same database as registered users. | Easy demo flow, but no automatic cleanup job is currently visible in the implementation. |
 | Frontend date limit | UI limits trips to 14 days. | Backend does not enforce the same 14-day limit, so API callers can request longer trips. |
 | LLM reliability | Invalid model output becomes a 502. | Preserves data integrity, but users may need to retry. |
-| Activity replacement | Persistence deletes old activity and inserts replacement with a new ID. | Simple model, but references to old activity IDs become invalid. |
+| Activity replacement | Backend deletes old activity and inserts replacement with a new ID. | Simple model, but references to old activity IDs become invalid. |
 | Travel context cache | In-memory per process. | Simple and fast, but not shared across replicas and lost on restart. |
 | Event lookup | Requires SerpApi key. | App still works without events, but generated plans lose real event enrichment. |
 | Places | Place provider classes exist, but the current `TripContextResponse` returns `places=[]` in the events-first flow. | Keeps prompt focused on events and weather. |
@@ -1933,7 +1879,6 @@ Do not edit generated outputs by hand:
 | Generated file | Source |
 | --- | --- |
 | `backend/src/main/resources/openapi.yaml` | Copied from `api-specification/frontend.yaml` during Gradle resource processing. |
-| `persistence-service/src/main/resources/openapi.yaml` | Copied from `api-specification/persistance.yaml` during Gradle resource processing. |
 | `frontend/src/lib/api-types.ts` | Generated from `api-specification/frontend.yaml` by `npm run generate-api-types`. |
 
 When API contracts change, update the relevant OpenAPI file first, then
@@ -1948,8 +1893,7 @@ Before handing in or demonstrating:
 3. `bash scripts/docker-compose-smoke.sh` passes after stack startup.
 4. `npm run lint`, `npm run test`, and `npm run build` pass in `frontend/`.
 5. `./gradlew build` passes in `backend/`.
-6. `./gradlew build` passes in `persistence-service/`.
-7. `flake8`, `mypy`, and `pytest --cov-fail-under=80` pass in both Python services.
-8. Prometheus targets are up.
-9. Grafana dashboard loads.
-10. A short trip can be generated and one activity can be regenerated.
+6. `flake8`, `mypy`, and `pytest --cov-fail-under=80` pass in both Python services.
+7. Prometheus targets are up.
+8. Grafana dashboard loads.
+9. A short trip can be generated and one activity can be regenerated.

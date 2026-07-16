@@ -5,16 +5,13 @@ import com.vacation.app.api.Activity
 import com.vacation.app.api.ActivityTag
 import com.vacation.app.api.Day
 import com.vacation.app.api.GenerationPreferences
-import com.vacation.app.api.Traveler
-import com.vacation.app.api.TravelerAuthRecord
-import com.vacation.app.api.TravelerCreateRequest
 import com.vacation.app.api.Trip
 import com.vacation.app.api.TripSummary
 import com.vacation.app.api.RegenerationInstruction
 import com.vacation.app.api.Schedule
 import com.vacation.app.api.TimeBlock
 import com.vacation.app.client.GenAiClient
-import com.vacation.app.client.PersistenceClient
+import com.vacation.app.repository.TripTailorRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
@@ -25,6 +22,7 @@ import org.springframework.context.annotation.Primary
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.junit.jupiter.SpringExtension
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
@@ -32,20 +30,19 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.patch
 import org.springframework.test.web.servlet.post
 import org.springframework.web.reactive.function.client.WebClientResponseException
-import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import org.junit.jupiter.api.extension.ExtendWith
 
 @ExtendWith(SpringExtension::class)
 @SpringBootTest
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
 class AppApiE2ETest {
 	@Autowired
 	private lateinit var mockMvc: MockMvc
 
 	@Autowired
-	private lateinit var persistenceClient: PersistenceClient
+	private lateinit var repository: TripTailorRepository
 
 	@Test
 	fun `health endpoint returns service status`() {
@@ -114,7 +111,7 @@ class AppApiE2ETest {
 		mockMvc.delete("/trips/$tripId") { header("Authorization", "Bearer $accessToken") }
 			.andExpect { status { isNoContent() } }
 
-		assertEquals(emptyList<TripSummary>(), persistenceClient.listTrips(UUID.fromString(travelerId)))
+		assertEquals(emptyList<TripSummary>(), repository.listTrips(UUID.fromString(travelerId)))
 	}
 
 	@Test
@@ -203,7 +200,7 @@ class AppApiE2ETest {
 			header("Authorization", "Bearer $secondToken")
 		}.andExpect {
 			status { isNotFound() }
-			jsonPath("$.type") { value("NOT_FOUND") }
+			jsonPath("$.type") { value("TRIP_NOT_FOUND") }
 		}
 	}
 
@@ -242,11 +239,7 @@ class AppApiE2ETest {
 	}
 
 	@TestConfiguration
-	class FakePersistenceConfiguration {
-		@Bean
-		@Primary
-		fun fakePersistenceClient(): PersistenceClient = InMemoryPersistenceClient()
-
+	class FakeGenAiConfiguration {
 		@Bean
 		@Primary
 		fun fakeGenAiClient(): GenAiClient = FakeGenAiClient()
@@ -300,64 +293,4 @@ private class FakeGenAiClient : GenAiClient {
 			isIndoor = true,
 			tags = listOf(ActivityTag.INDOOR, ActivityTag.SPORTY),
 		)
-}
-
-private class InMemoryPersistenceClient : PersistenceClient {
-	private val travelers = ConcurrentHashMap<UUID, Traveler>()
-	private val authRecords = ConcurrentHashMap<String, TravelerAuthRecord>()
-	private val trips = ConcurrentHashMap<UUID, MutableMap<UUID, Trip>>()
-
-	override fun createTraveler(request: TravelerCreateRequest): Traveler {
-		if (!request.email.isNullOrBlank() && authRecords.containsKey(request.email)) {
-			throw WebClientResponseException.Conflict.create(409, "Conflict", HttpHeaders.EMPTY, ByteArray(0), null)
-		}
-		val traveler = Traveler(UUID.randomUUID(), request.email, request.isDemo, Instant.now())
-		travelers[traveler.id] = traveler
-		if (!request.email.isNullOrBlank() && !request.passwordHash.isNullOrBlank()) {
-			authRecords[request.email] = TravelerAuthRecord(traveler.id, request.email, request.passwordHash, traveler.isDemo, traveler.createdAt)
-		}
-		trips[traveler.id] = ConcurrentHashMap()
-		return traveler
-	}
-
-	override fun findTravelerAuthRecordByEmail(email: String): TravelerAuthRecord =
-		authRecords[email] ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
-
-	override fun listTrips(travelerId: UUID): List<TripSummary> =
-		trips[travelerId].orEmpty().values.map { TripSummary(it.id, it.destination, it.startDate, it.endDate) }
-
-	override fun saveTrip(travelerId: UUID, trip: Trip): Trip {
-		val travelerTrips = trips[travelerId] ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
-		travelerTrips[trip.id] = trip
-		return trip
-	}
-
-	override fun getTrip(travelerId: UUID, tripId: UUID): Trip =
-		trips[travelerId]?.get(tripId) ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
-
-	override fun deleteTrip(travelerId: UUID, tripId: UUID) {
-		val travelerTrips = trips[travelerId] ?: throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
-		if (travelerTrips.remove(tripId) == null) {
-			throw WebClientResponseException.NotFound.create(404, "Not Found", HttpHeaders.EMPTY, ByteArray(0), null)
-		}
-	}
-
-	override fun updateActivity(tripId: UUID, dayId: UUID, activityId: UUID, activity: Activity): Activity {
-		val travelerTrips = trips.values.first { it.containsKey(tripId) }
-		val trip = travelerTrips.getValue(tripId)
-		val days = trip.schedule.days.map { day ->
-			if (day.id == dayId) day.copy(activities = day.activities.map { if (it.id == activityId) activity else it }) else day
-		}
-		travelerTrips[tripId] = trip.copy(schedule = trip.schedule.copy(days = days))
-		return activity
-	}
-
-	override fun deleteActivity(tripId: UUID, dayId: UUID, activityId: UUID) {
-		val travelerTrips = trips.values.first { it.containsKey(tripId) }
-		val trip = travelerTrips.getValue(tripId)
-		val days = trip.schedule.days.map { day ->
-			if (day.id == dayId) day.copy(activities = day.activities.filterNot { it.id == activityId }) else day
-		}
-		travelerTrips[tripId] = trip.copy(schedule = trip.schedule.copy(days = days))
-	}
 }

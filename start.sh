@@ -87,8 +87,6 @@ build_image_if_missing() {
 
 build_image_if_missing "triptailor/backend:latest" "${ROOT_DIR}/backend" \
 	--build-context "api-spec=${ROOT_DIR}/api-specification"
-build_image_if_missing "triptailor/persistence-service:latest" "${ROOT_DIR}/persistence-service" \
-	--build-context "api-spec=${ROOT_DIR}/api-specification"
 build_image_if_missing "triptailor/genai-service:latest" "${ROOT_DIR}/genai-service"
 build_image_if_missing "triptailor/travel-context-service:latest" "${ROOT_DIR}/travel-context-service"
 build_image_if_missing "triptailor/frontend:latest" "${ROOT_DIR}/frontend" \
@@ -133,7 +131,6 @@ fi
 "${HELM_BIN}" "${helm_args[@]}"
 
 kubectl -n "${NAMESPACE}" rollout status deploy/db --timeout=180s
-kubectl -n "${NAMESPACE}" rollout status deploy/persistence-service --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/travel-context-service --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/genai-service --timeout=180s
 kubectl -n "${NAMESPACE}" rollout status deploy/backend --timeout=180s

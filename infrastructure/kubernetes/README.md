@@ -5,7 +5,6 @@ This directory contains a simple Helm chart for deploying TripTailor to Kubernet
 The chart mirrors the working `docker-compose.yml` topology:
 
 - `db`: PostgreSQL 17 with a persistent volume
-- `persistence-service`: Spring Boot service on port 8081
 - `travel-context-service`: FastAPI enrichment service on port 8090
 - `genai-service`: FastAPI service on port 8000
 - `backend`: Spring Boot app API on port 8080
@@ -19,13 +18,11 @@ Browser
       /      -> frontend
       /api/* -> backend
   -> backend
-      -> persistence-service
       -> genai-service
-  -> persistence-service
       -> db
 ```
 
-`persistence-service`, `genai-service`, and `db` stay private inside the cluster. The LLM service is intentionally not exposed through the gateway because the backend owns authentication, validation, trip context, persistence, and error handling.
+`genai-service` and `db` stay private inside the cluster. The LLM service is intentionally not exposed through the gateway because the backend owns authentication, validation, trip context, persistence, and error handling.
 
 Kubernetes load balancing is provided by `Service` objects. For example, if `backend.replicaCount` is `3`, the `backend` Service keeps one stable address and distributes traffic across the ready backend pods. This is load balancing only, not autoscaling. Autoscaling would require a separate HorizontalPodAutoscaler and metrics support.
 
@@ -45,7 +42,6 @@ Build the local images:
 
 ```bash
 docker build -t triptailor/backend:latest --build-context api-spec=api-specification backend
-docker build -t triptailor/persistence-service:latest --build-context api-spec=api-specification persistence-service
 docker build -t triptailor/genai-service:latest genai-service
 docker build -t triptailor/travel-context-service:latest travel-context-service
 docker build -t triptailor/frontend:latest --build-context api-spec=api-specification frontend
@@ -64,7 +60,6 @@ Wait for the rollout:
 
 ```bash
 kubectl -n triptailor-local rollout status deploy/db
-kubectl -n triptailor-local rollout status deploy/persistence-service
 kubectl -n triptailor-local rollout status deploy/travel-context-service
 kubectl -n triptailor-local rollout status deploy/genai-service
 kubectl -n triptailor-local rollout status deploy/backend
@@ -119,10 +114,9 @@ kubectl delete namespace triptailor-local
 
 GitHub Actions publishes images and deploys them to the AET namespace. The workflow is `.github/workflows/images.yaml`.
 
-It publishes the five images to GitHub Container Registry as:
+It publishes the four images to GitHub Container Registry as:
 
 - `ghcr.io/aet-devops26/team-continuous-vacation/backend:<git-sha>`
-- `ghcr.io/aet-devops26/team-continuous-vacation/persistence-service:<git-sha>`
 - `ghcr.io/aet-devops26/team-continuous-vacation/genai-service:<git-sha>`
 - `ghcr.io/aet-devops26/team-continuous-vacation/travel-context-service:<git-sha>`
 - `ghcr.io/aet-devops26/team-continuous-vacation/frontend:<git-sha>`

@@ -5,7 +5,6 @@ actor User
 participant Frontend
 participant "Backend API\n(Spring Boot)" as API
 participant "GenAI Service\n(Python)" as AI
-participant "Persistence Service\n(Spring Boot)" as PERSIST
 database DB
 
 User -> Frontend : Enter trip details
@@ -13,10 +12,8 @@ Frontend -> API : POST /trips
 API -> AI : POST /schedules
 AI -> AI : Call LLM
 AI --> API : Return validated schedule
-API -> PERSIST : POST /trips?travelerId={id}
-PERSIST -> DB : Insert trip, days, activities
-DB --> PERSIST : Saved to DB
-PERSIST --> API : Saved trip
+API -> DB : Insert trip, days, activities
+DB --> API : Saved trip
 API --> Frontend : Return itinerary
 
 @enduml
