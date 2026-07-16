@@ -48,7 +48,7 @@ rectangle "TripTailor System" {
 }
 
 cloud "Configured LLM\nAzure OpenAI or local endpoint" as LLM
-cloud "Travel Data Providers\nNominatim / Photon (geocoding)\nOverpass API (places)\nSerpApi (events)\nOpen-Meteo (weather)" as Providers
+cloud "Travel Data Providers\nNominatim / Photon (geocoding)\nSerpApi (events)\nOpen-Meteo (weather)" as Providers
 
 Traveler --> Gateway : HTTPS
 Gateway --> Frontend : /*\nstatic application

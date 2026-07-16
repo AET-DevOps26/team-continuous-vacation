@@ -2,6 +2,8 @@
 API routes matching the gen-ai.yaml OpenAPI specification
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from app.models.schemas import (
     GenerationPreferences,
@@ -12,6 +14,7 @@ from app.models.schemas import (
 from app.services.schedule_service import ScheduleGenerationError, ScheduleService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def get_schedule_service() -> ScheduleService:
@@ -37,11 +40,12 @@ async def generate_schedule(
         return schedule
     except ScheduleGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
+    except Exception as error:
+        logger.exception("Unexpected schedule generation failure")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate schedule: {str(e)}",
-        )
+            detail="Failed to generate schedule",
+        ) from error
 
 
 @router.post("/activities/alternative", response_model=Activity, tags=["Activities"])
@@ -69,7 +73,8 @@ async def suggest_alternative_activity(
         return alternative
     except ScheduleGenerationError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    except Exception:
+    except Exception as error:
+        logger.exception("Unexpected alternative activity generation failure")
         raise HTTPException(
             status_code=500, detail="Failed to suggest alternative activity"
-        )
+        ) from error

@@ -3,6 +3,8 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
+
 from app.models.schemas import GenerationPreferences
 from app.services.llm.base import LLMGenerationOptions, LLMProvider
 
@@ -63,10 +65,6 @@ class ContextDecision:
     source: DecisionSource
     reason: str
 
-    @property
-    def should_fetch_city_places(self) -> bool:
-        return self.should_fetch_events_context
-
 
 class ContextRelevanceClassifier:
     """Decides whether external events context is useful for a trip request."""
@@ -81,13 +79,6 @@ class ContextRelevanceClassifier:
             return rule_decision
 
         return await self._ai_decision(preferences, llm_provider)
-
-    async def should_fetch_city_places(
-        self,
-        preferences: GenerationPreferences,
-        llm_provider: LLMProvider,
-    ) -> ContextDecision:
-        return await self.should_fetch_events_context(preferences, llm_provider)
 
     def _rule_decision(self, preferences: GenerationPreferences) -> ContextDecision | None:
         text = f"{preferences.destination} {preferences.vibe}".lower()
@@ -129,9 +120,9 @@ class ContextRelevanceClassifier:
                     json_mode=True,
                 ),
             )
-            parsed = _load_json(response)
-            should_fetch = bool(parsed.get("shouldFetchEventsContext", parsed.get("shouldFetchCityPlaces", True)))
-            reason = str(parsed.get("reason", "AI classified context relevance."))
+            parsed = ContextClassification.model_validate(_load_json(response))
+            should_fetch = parsed.shouldFetchEventsContext
+            reason = parsed.reason
             logger.info(
                 "AI context relevance decision destination=%s should_fetch_events_context=%s reason=%s",
                 preferences.destination,
@@ -173,7 +164,6 @@ Trip request:
 
 Return JSON only:
 {{
-  "shouldFetchCityPlaces": true,
   "shouldFetchEventsContext": true,
   "reason": "short reason"
 }}
@@ -195,3 +185,10 @@ def _load_json(response_text: str) -> dict:
     elif cleaned.startswith("```"):
         cleaned = cleaned.split("```", 1)[1].split("```", 1)[0].strip()
     return json.loads(cleaned)
+
+
+class ContextClassification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shouldFetchEventsContext: StrictBool
+    reason: str = Field(min_length=1, max_length=500)

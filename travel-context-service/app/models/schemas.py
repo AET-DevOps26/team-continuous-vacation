@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Coordinates(BaseModel):
-    lat: float
-    lon: float
+    model_config = ConfigDict(extra="forbid")
+
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
 
 
 class GeocodedLocation(BaseModel):
@@ -19,26 +21,21 @@ class GeocodedLocation(BaseModel):
 
 
 class TripContextRequest(BaseModel):
-    destination: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    destination: str = Field(min_length=1, max_length=200)
     startDate: datetime.date
     endDate: datetime.date
-    vibe: str = Field(min_length=1)
+    vibe: str = Field(min_length=1, max_length=500)
     includeEvents: bool = True
 
-
-class PlaceCandidate(BaseModel):
-    source: str
-    sourceId: str
-    name: str
-    category: Optional[str] = None
-    latitude: float
-    longitude: float
-    address: Optional[str] = None
-    website: Optional[str] = None
-    wikipedia: Optional[str] = None
-    openingHours: Optional[str] = None
-    osmTags: dict[str, Any] = Field(default_factory=dict)
-    score: float = 0.0
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "TripContextRequest":
+        if self.endDate < self.startDate:
+            raise ValueError("endDate must be on or after startDate")
+        if (self.endDate - self.startDate).days >= 7:
+            raise ValueError("trip length must not exceed 7 days")
+        return self
 
 
 class TicketLink(BaseModel):
@@ -60,7 +57,7 @@ class EventCandidate(BaseModel):
     link: Optional[str] = None
     ticketLinks: list[TicketLink] = Field(default_factory=list)
     thumbnail: Optional[str] = None
-    score: float = 0.0
+    score: float = Field(default=0.0, ge=0)
 
 
 TimeBlock = Literal["MORNING", "NOON", "AFTERNOON", "EVENING", "NIGHT"]
@@ -72,7 +69,7 @@ class WeatherBlock(BaseModel):
     timeBlock: TimeBlock
     condition: str
     temperatureC: Optional[float] = None
-    precipitationMm: float = 0.0
+    precipitationMm: float = Field(default=0.0, ge=0)
 
 
 class WeatherDaily(BaseModel):
@@ -84,7 +81,7 @@ class WeatherDaily(BaseModel):
     summary: str
     tempMinC: Optional[float] = None
     tempMaxC: Optional[float] = None
-    precipitationProbabilityMax: Optional[int] = None
+    precipitationProbabilityMax: Optional[int] = Field(default=None, ge=0, le=100)
     blocks: list[WeatherBlock] = Field(default_factory=list)
 
 
@@ -92,5 +89,4 @@ class TripContextResponse(BaseModel):
     destination: str
     coordinates: Coordinates
     events: list[EventCandidate] = Field(default_factory=list)
-    places: list[PlaceCandidate] = Field(default_factory=list)
     weather: list[WeatherDaily] = Field(default_factory=list)

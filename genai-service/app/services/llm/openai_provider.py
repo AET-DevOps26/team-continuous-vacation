@@ -36,11 +36,11 @@ class OpenAIProvider(LLMProvider):
         payload = self._build_payload(prompt, options)
         logger.debug(
             "Sending LLM request provider=openai-compatible base_url=%s model=%s "
-            "json_mode=%s messages=%s controls=%s",
+            "json_mode=%s message_lengths=%s controls=%s",
             self.base_url,
             self.model_name,
             options.json_mode,
-            _summarize_messages(payload["messages"]),
+            _message_lengths(payload["messages"]),
             _generation_controls(payload),
         )
 
@@ -50,14 +50,14 @@ class OpenAIProvider(LLMProvider):
             )
             logger.debug(
                 "Received LLM HTTP response provider=openai-compatible "
-                "status_code=%s body=%s",
+                "status_code=%s response_bytes=%s",
                 response.status_code,
-                response.text,
+                len(response.content),
             )
 
             if response.status_code != 200:
                 raise Exception(
-                    f"OpenAI API error: {response.status_code} - {response.text}"
+                    f"OpenAI API error: {response.status_code}"
                 )
 
             data = response.json()
@@ -70,11 +70,10 @@ class OpenAIProvider(LLMProvider):
             )
             logger.debug(
                 "Parsed LLM response provider=openai-compatible finish_reason=%s "
-                "usage=%s content_length=%s content=%r",
+                "usage=%s content_length=%s",
                 choice.get("finish_reason"),
                 data.get("usage"),
                 len(content or ""),
-                content,
             )
             if not content:
                 raise Exception(
@@ -157,12 +156,12 @@ class AzureOpenAIProvider(OpenAIProvider):
 
         logger.debug(
             "Sending LLM request provider=azure base_url=%s deployment=%s "
-            "api_version=%s json_mode=%s messages=%s controls=%s",
+            "api_version=%s json_mode=%s message_lengths=%s controls=%s",
             self.base_url,
             self.model_name,
             self.api_version,
             options.json_mode,
-            _summarize_messages(payload["messages"]),
+            _message_lengths(payload["messages"]),
             _generation_controls(payload),
         )
         response = await asyncio.to_thread(
@@ -179,12 +178,10 @@ class AzureOpenAIProvider(OpenAIProvider):
         )
         logger.debug(
             "Received LLM response provider=azure finish_reason=%s usage=%s "
-            "content_length=%s content=%r raw_response=%s",
+            "content_length=%s",
             finish_reason,
             usage,
             len(content or ""),
-            content,
-            _safe_model_dump(response),
         )
         if not content:
             raise Exception(
@@ -213,12 +210,11 @@ def _generation_controls(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: payload[key] for key in control_keys if key in payload}
 
 
-def _summarize_messages(messages: list[dict[str, str]]) -> list[dict[str, Any]]:
+def _message_lengths(messages: list[dict[str, str]]) -> list[dict[str, Any]]:
     return [
         {
             "role": message.get("role"),
             "content_length": len(message.get("content") or ""),
-            "content": message.get("content"),
         }
         for message in messages
     ]

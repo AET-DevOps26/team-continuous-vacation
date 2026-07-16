@@ -1,7 +1,6 @@
 import logging
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api.routes import schedules
@@ -21,15 +20,6 @@ app = FastAPI(
 
 configure_observability(app, "genai-service")
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Include routers
 app.include_router(schedules.router)
 
@@ -42,6 +32,16 @@ Instrumentator().instrument(app).expose(app)
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "genai-service"}
+
+
+@app.get("/ready")
+async def readiness_check():
+    """Configuration readiness without depending on external provider uptime."""
+    return {
+        "status": "ready",
+        "service": "genai-service",
+        "provider": settings.LLM_PROVIDER,
+    }
 
 
 @app.get("/")

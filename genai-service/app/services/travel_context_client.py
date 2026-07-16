@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 from pydantic import BaseModel, Field
@@ -15,21 +15,6 @@ tracer = get_tracer(__name__)
 class Coordinates(BaseModel):
     lat: float
     lon: float
-
-
-class PlaceCandidate(BaseModel):
-    source: str
-    sourceId: str
-    name: str
-    category: Optional[str] = None
-    latitude: float
-    longitude: float
-    address: Optional[str] = None
-    website: Optional[str] = None
-    wikipedia: Optional[str] = None
-    openingHours: Optional[str] = None
-    osmTags: dict[str, Any] = Field(default_factory=dict)
-    score: float = 0.0
 
 
 class TicketLink(BaseModel):
@@ -76,7 +61,6 @@ class TravelContext(BaseModel):
     destination: str
     coordinates: Coordinates
     events: list[EventCandidate] = Field(default_factory=list)
-    places: list[PlaceCandidate] = Field(default_factory=list)
     weather: list[WeatherDaily] = Field(default_factory=list)
 
 

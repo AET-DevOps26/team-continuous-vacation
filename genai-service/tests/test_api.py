@@ -268,3 +268,45 @@ def test_suggest_alternative_activity():
     assert "title" in data
     assert "description" in data
     assert "durationMinutes" in data
+
+
+def test_generation_preferences_accepts_seven_day_trip():
+    from app.models.schemas import GenerationPreferences
+
+    preferences = GenerationPreferences(
+        destination="Munich",
+        startDate="2026-05-15",
+        endDate="2026-05-21",
+        vibe="cultural",
+    )
+
+    assert preferences.startDate.isoformat() == "2026-05-15"
+    assert preferences.endDate.isoformat() == "2026-05-21"
+
+
+def test_generate_schedule_rejects_eight_day_trip():
+    response = client.post(
+        "/schedules",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-05-15",
+            "endDate": "2026-05-22",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_reversed_dates():
+    response = client.post(
+        "/schedules",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-05-18",
+            "endDate": "2026-05-15",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422

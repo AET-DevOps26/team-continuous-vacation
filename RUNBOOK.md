@@ -776,7 +776,6 @@ The travel context service enriches trip generation with real-world context.
 | Open-Meteo forecast API | Weather for dates within the forecast horizon. | no |
 | Open-Meteo archive API | Historical seasonal estimate for dates beyond the forecast horizon. | no |
 | SerpApi Google Events | Event candidates. | yes, `SERPAPI_API_KEY` |
-| Overpass | Place provider exists in code, but the current response returns empty `places` in the events-first flow. | no |
 
 ### 10.2 Weather Rules
 
@@ -1917,12 +1916,11 @@ Recommended code-reading order:
 | Area | Current behavior | Tradeoff |
 | --- | --- | --- |
 | Demo users | Demo travelers are stored in the same database as registered users. | Easy demo flow, but no automatic cleanup job is currently visible in the implementation. |
-| Frontend date limit | UI limits trips to 14 days. | Backend does not enforce the same 14-day limit, so API callers can request longer trips. |
+| Trip date limit | GenAI and travel-context APIs enforce an inclusive maximum of 7 days. | Keeps generation cost and itinerary size bounded. |
 | LLM reliability | Invalid model output becomes a 502. | Preserves data integrity, but users may need to retry. |
 | Activity replacement | Persistence deletes old activity and inserts replacement with a new ID. | Simple model, but references to old activity IDs become invalid. |
 | Travel context cache | In-memory per process. | Simple and fast, but not shared across replicas and lost on restart. |
 | Event lookup | Requires SerpApi key. | App still works without events, but generated plans lose real event enrichment. |
-| Places | Place provider classes exist, but the current `TripContextResponse` returns `places=[]` in the events-first flow. | Keeps prompt focused on events and weather. |
 | Auth | HS256 shared secret JWT. | Simple for project deployment; production would use stronger secret management and rotation. |
 | Gateway | NGINX routes public frontend/API/monitoring. | Internal services remain private in Kubernetes; Compose exposes travel context and monitoring for debugging. |
 

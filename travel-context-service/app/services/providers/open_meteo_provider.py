@@ -92,7 +92,7 @@ class OpenMeteoWeatherProvider:
         # Fetch segments independently so one provider-window failure does not
         # discard weather already available from the other endpoint.
         await self._load_forecast(coordinates, forecast_dates, result)
-        await self._load_historical(coordinates, historical_dates, result)
+        await self._load_historical(coordinates, historical_dates, result, today)
         return [result[d] for d in trip_dates if d in result]
 
     async def _load_forecast(
@@ -128,10 +128,13 @@ class OpenMeteoWeatherProvider:
         coordinates: Coordinates,
         historical_dates: list[date],
         result: dict[date, WeatherDaily],
+        today: date,
     ) -> None:
         if not historical_dates:
             return
-        reference_map = {d: _prior_year(d) for d in historical_dates}
+        reference_map = {
+            d: _historical_reference(d, today) for d in historical_dates
+        }
         references = sorted(reference_map.values())
         try:
             by_date = await self._fetch_buckets(
@@ -217,6 +220,20 @@ def _prior_year(value: date) -> date:
     except ValueError:
         # Feb 29 in a non-leap reference year -> clamp to Feb 28.
         return value.replace(year=value.year - 1, day=28)
+
+
+def _historical_reference(value: date, today: date) -> date:
+    """Choose an archive date that is safely in the past.
+
+    Past trip dates use their actual observations. Future dates use the most
+    recent matching calendar date at least five days behind today, avoiding
+    archive requests for dates that have not happened yet.
+    """
+    archive_cutoff = today - timedelta(days=5)
+    reference = value
+    while reference > archive_cutoff:
+        reference = _prior_year(reference)
+    return reference
 
 
 def _bucket_hourly(hourly: dict[str, Any]) -> dict[date, list[dict[str, Any]]]:

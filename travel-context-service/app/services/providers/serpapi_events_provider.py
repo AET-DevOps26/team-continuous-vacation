@@ -19,7 +19,7 @@ class SerpApiEventsProvider:
     async def search_events(
         self,
         location_name: str,
-        country_code: str,
+        country_code: str | None,
         date_filter: str | None = None,
     ) -> list[EventCandidate]:
         if not self.api_key:
@@ -30,11 +30,12 @@ class SerpApiEventsProvider:
             "engine": "google_events",
             "q": f"Events in {location_name}",
             "location": location_name,
-            "gl": country_code,
             "api_key": self.api_key,
             "no_cache": "false",
             "output": "json",
         }
+        if country_code:
+            params["gl"] = country_code
         if date_filter:
             params["htichips"] = date_filter
 

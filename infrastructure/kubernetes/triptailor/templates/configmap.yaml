@@ -23,15 +23,11 @@ data:
   LOG_LEVEL: {{ .Values.genaiService.config.LOG_LEVEL | quote }}
   NOMINATIM_BASE_URL: {{ .Values.travelContextService.config.NOMINATIM_BASE_URL | quote }}
   PHOTON_BASE_URL: {{ .Values.travelContextService.config.PHOTON_BASE_URL | quote }}
-  OVERPASS_BASE_URL: {{ .Values.travelContextService.config.OVERPASS_BASE_URL | quote }}
   SERPAPI_BASE_URL: {{ .Values.travelContextService.config.SERPAPI_BASE_URL | quote }}
   OPEN_METEO_FORECAST_BASE_URL: {{ .Values.travelContextService.config.OPEN_METEO_FORECAST_BASE_URL | quote }}
   OPEN_METEO_ARCHIVE_BASE_URL: {{ .Values.travelContextService.config.OPEN_METEO_ARCHIVE_BASE_URL | quote }}
   WEATHER_ENABLED: {{ .Values.travelContextService.config.WEATHER_ENABLED | quote }}
   WEATHER_FORECAST_MAX_DAYS: {{ .Values.travelContextService.config.WEATHER_FORECAST_MAX_DAYS | quote }}
   HTTP_USER_AGENT: {{ .Values.travelContextService.config.HTTP_USER_AGENT | quote }}
-  PLACE_SEARCH_RADIUS_METERS: {{ .Values.travelContextService.config.PLACE_SEARCH_RADIUS_METERS | quote }}
-  PLACE_SEARCH_LIMIT: {{ .Values.travelContextService.config.PLACE_SEARCH_LIMIT | quote }}
   EVENT_SEARCH_LIMIT: {{ .Values.travelContextService.config.EVENT_SEARCH_LIMIT | quote }}
-  OVERPASS_TIMEOUT_SECONDS: {{ .Values.travelContextService.config.OVERPASS_TIMEOUT_SECONDS | quote }}
   CACHE_TTL_SECONDS: {{ .Values.travelContextService.config.CACHE_TTL_SECONDS | quote }}

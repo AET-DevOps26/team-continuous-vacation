@@ -5,8 +5,10 @@ import pytest
 
 from app.models.schemas import Coordinates
 from app.services.providers.nominatim_provider import NominatimProvider
-from app.services.providers.open_meteo_provider import OpenMeteoWeatherProvider
-from app.services.providers.overpass_provider import OverpassProvider, build_overpass_query
+from app.services.providers.open_meteo_provider import (
+    OpenMeteoWeatherProvider,
+    _historical_reference,
+)
 from app.services.providers.photon_provider import PhotonProvider
 from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
 
@@ -58,61 +60,6 @@ async def test_nominatim_rate_limit_error_propagates(monkeypatch):
 
     with pytest.raises(httpx.HTTPStatusError):
         await provider.geocode("Munich")
-
-
-@pytest.mark.asyncio
-async def test_overpass_maps_nodes_ways_and_relations(monkeypatch):
-    async def fake_post(self, url, content=None, headers=None):
-        return httpx.Response(
-            200,
-            json={
-                "elements": [
-                    {
-                        "type": "node",
-                        "id": 1,
-                        "lat": 48.1,
-                        "lon": 11.5,
-                        "tags": {"name": "Marienplatz", "place": "square"},
-                    },
-                    {
-                        "type": "way",
-                        "id": 2,
-                        "center": {"lat": 48.2, "lon": 11.6},
-                        "tags": {"name": "Englischer Garten", "leisure": "park"},
-                    },
-                    {
-                        "type": "relation",
-                        "id": 3,
-                        "center": {"lat": 48.3, "lon": 11.7},
-                        "tags": {"name": "Tierpark Hellabrunn", "tourism": "zoo"},
-                    },
-                ]
-            },
-            request=httpx.Request("POST", url),
-        )
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
-    provider = OverpassProvider("https://overpass.example", "test-agent")
-
-    places = await provider.search_places(48.13, 11.57, 12000)
-
-    assert [place.name for place in places] == [
-        "Marienplatz",
-        "Englischer Garten",
-        "Tierpark Hellabrunn",
-    ]
-    assert places[1].latitude == 48.2
-    assert places[2].longitude == 11.7
-
-
-def test_overpass_query_uses_radius_and_expected_tags():
-    query = build_overpass_query(48.137154, 11.576124, 12000)
-
-    assert "[out:json][timeout:12];" in query
-    assert "around:12000,48.137154,11.576124" in query
-    assert '"place"="square"' in query
-    assert '"tourism"~"attraction|museum|gallery|viewpoint|zoo|artwork|theme_park"' in query
-    assert '"waterway"~"river|stream"' in query
 
 
 @pytest.mark.asyncio
@@ -419,3 +366,10 @@ def test_prior_year_clamps_leap_day():
 
     assert _prior_year(date(2028, 2, 29)) == date(2027, 2, 28)
     assert _prior_year(date(2026, 7, 1)) == date(2025, 7, 1)
+
+
+def test_historical_reference_uses_actual_past_date_and_safe_future_year():
+    today = date(2026, 6, 1)
+
+    assert _historical_reference(date(2025, 5, 1), today) == date(2025, 5, 1)
+    assert _historical_reference(date(2028, 7, 1), today) == date(2025, 7, 1)

@@ -1,11 +1,17 @@
+from functools import lru_cache
+
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.models.schemas import TripContextRequest, TripContextResponse
 from app.services.context_service import TravelContextService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=1)
 def get_travel_context_service() -> TravelContextService:
     return TravelContextService()
 
@@ -20,4 +26,7 @@ async def get_trip_context(
     except HTTPException:
         raise
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"Failed to build travel context: {error}") from error
+        logger.exception("Failed to build travel context")
+        raise HTTPException(
+            status_code=502, detail="Failed to build travel context"
+        ) from error

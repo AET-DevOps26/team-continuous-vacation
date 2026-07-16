@@ -21,7 +21,6 @@ class FakeTravelContextService:
                     score=40,
                 )
             ],
-            places=[],
         )
 
 
@@ -55,7 +54,6 @@ def test_trip_context_endpoint_returns_events():
     assert data["destination"] == "Munich"
     assert data["coordinates"]["lat"] == 48.137154
     assert data["events"][0]["title"] == "Munich Summer Festival"
-    assert data["places"] == []
 
 
 def test_trip_context_endpoint_validates_required_payload():
@@ -84,4 +82,46 @@ def test_trip_context_endpoint_returns_502_on_provider_failure():
     )
 
     assert response.status_code == 502
-    assert "provider rate limit" in response.json()["detail"]
+    assert response.json()["detail"] == "Failed to build travel context"
+
+
+def test_trip_context_endpoint_accepts_seven_day_trip():
+    response = client.post(
+        "/trip-context",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-07",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_trip_context_endpoint_rejects_eight_day_trip():
+    response = client.post(
+        "/trip-context",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-08",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_trip_context_endpoint_rejects_reversed_dates():
+    response = client.post(
+        "/trip-context",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-06-05",
+            "endDate": "2026-06-01",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422

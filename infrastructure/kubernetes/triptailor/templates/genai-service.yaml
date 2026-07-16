@@ -35,6 +35,10 @@ spec:
         {{- include "triptailor.selectorLabels" . | nindent 8 }}
     spec:
       securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      securityContext:
         {{- include "triptailor.podSecurityContext" (dict "uid" 1001) | nindent 8 }}
       automountServiceAccountToken: false
       {{- include "triptailor.imagePullSecrets" . | nindent 6 }}
@@ -42,6 +46,11 @@ spec:
         - name: genai-service
           image: "{{ .Values.genaiService.image.repository }}:{{ .Values.genaiService.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           securityContext:
             {{- include "triptailor.containerSecurityContext" . | nindent 12 }}
           ports:
@@ -76,7 +85,7 @@ spec:
             {{- end }}
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10

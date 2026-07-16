@@ -9,7 +9,7 @@ from enum import Enum
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TimeBlock(str, Enum):
@@ -42,8 +42,8 @@ class ActivityFields(BaseModel):
     """Shared activity fields for API and LLM-facing models."""
 
     timeBlock: TimeBlock
-    title: str = Field(min_length=1)
-    description: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=1000)
     durationMinutes: int = Field(ge=30, le=360)
     isIndoor: Optional[bool] = None
     tags: Optional[List[ActivityTag]] = None
@@ -51,6 +51,8 @@ class ActivityFields(BaseModel):
 
 class GeneratedActivity(ActivityFields):
     """Activity shape expected from the LLM before IDs are assigned."""
+
+    model_config = ConfigDict(extra="forbid")
 
     tags: List[ActivityTag] = Field(default_factory=list)
 
@@ -74,6 +76,8 @@ class DayFields(BaseModel):
 class GeneratedDay(DayFields):
     """Day shape expected from the LLM before IDs are assigned."""
 
+    model_config = ConfigDict(extra="forbid")
+
     activities: List[GeneratedActivity] = Field(min_length=1)
 
 
@@ -89,6 +93,8 @@ class Day(DayFields):
 class GeneratedSchedule(BaseModel):
     """Schedule shape expected from the LLM before IDs are assigned."""
 
+    model_config = ConfigDict(extra="forbid")
+
     days: List[GeneratedDay] = Field(min_length=1)
 
 
@@ -101,10 +107,20 @@ class Schedule(BaseModel):
 class GenerationPreferences(BaseModel):
     """Preferences for generating a new schedule"""
 
-    destination: str
+    model_config = ConfigDict(extra="forbid")
+
+    destination: str = Field(min_length=1, max_length=200)
     startDate: date
     endDate: date
-    vibe: str
+    vibe: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "GenerationPreferences":
+        if self.endDate < self.startDate:
+            raise ValueError("endDate must be on or after startDate")
+        if (self.endDate - self.startDate).days >= 7:
+            raise ValueError("trip length must not exceed 7 days")
+        return self
 
 
 class TripContext(BaseModel):
@@ -122,6 +138,27 @@ class TripContext(BaseModel):
 class AlternativeActivityRequest(BaseModel):
     """Request for suggesting an alternative activity"""
 
-    instruction: str
+    model_config = ConfigDict(extra="forbid")
+
+    instruction: str = Field(min_length=1, max_length=1000)
     activity: Activity
     tripContext: TripContext
+
+    @model_validator(mode="after")
+    def validate_activity_context(self) -> "AlternativeActivityRequest":
+        matching = [
+            candidate
+            for day in self.tripContext.days
+            for candidate in day.activities
+            if candidate.id == self.activity.id
+        ]
+        if len(matching) != 1 or matching[0] != self.activity:
+            raise ValueError("activity must occur exactly once in tripContext")
+        parent = next(
+            day
+            for day in self.tripContext.days
+            if any(candidate.id == self.activity.id for candidate in day.activities)
+        )
+        if self.activity.dayId != parent.id:
+            raise ValueError("activity dayId must match its parent day")
+        return self

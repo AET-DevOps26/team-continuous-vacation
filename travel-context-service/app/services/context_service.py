@@ -14,10 +14,8 @@ from app.models.schemas import (
 from app.services.cache import TtlCache
 from app.services.providers.nominatim_provider import NominatimProvider
 from app.services.providers.open_meteo_provider import OpenMeteoWeatherProvider
-from app.services.providers.overpass_provider import OverpassProvider
 from app.services.providers.photon_provider import PhotonProvider
 from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
-from app.services.ranking import PlaceRanker
 from app.observability import get_tracer
 from app.metrics import (
     CACHE_REQUESTS_TOTAL,
@@ -30,7 +28,6 @@ from app.metrics import (
 logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
 
-COUNTRY_CODE_FALLBACK = "us"
 GERMANY_ALIASES = {"de", "deu", "germany", "deutschland"}
 
 
@@ -39,7 +36,6 @@ class TravelContextService:
         self,
         geocoder: NominatimProvider | None = None,
         fallback_geocoder: PhotonProvider | None = None,
-        place_provider: OverpassProvider | None = None,
         events_provider: SerpApiEventsProvider | None = None,
         weather_provider: OpenMeteoWeatherProvider | None = None,
         geocode_cache: TtlCache[GeocodedLocation] | None = None,
@@ -52,9 +48,6 @@ class TravelContextService:
         self.fallback_geocoder = fallback_geocoder or PhotonProvider(
             settings.PHOTON_BASE_URL, settings.HTTP_USER_AGENT
         )
-        self.place_provider = place_provider or OverpassProvider(
-            settings.OVERPASS_BASE_URL, settings.HTTP_USER_AGENT
-        )
         self.events_provider = events_provider or SerpApiEventsProvider(
             settings.SERPAPI_BASE_URL, settings.SERPAPI_API_KEY
         )
@@ -66,7 +59,6 @@ class TravelContextService:
         self.geocode_cache = geocode_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.events_cache = events_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.weather_cache = weather_cache or TtlCache(settings.CACHE_TTL_SECONDS)
-        self.ranker = PlaceRanker()
 
     async def build_trip_context(
         self, request: TripContextRequest
@@ -121,7 +113,6 @@ class TravelContextService:
             destination=request.destination,
             coordinates=location.coordinates,
             events=events,
-            places=[],
             weather=weather,
         )
 
@@ -232,11 +223,17 @@ class TravelContextService:
             PROVIDER_REQUESTS_TOTAL.labels(
                 provider="serpapi_events", outcome="success"
             ).inc()
-        except Exception:
+        except Exception as error:
             PROVIDER_REQUESTS_TOTAL.labels(
                 provider="serpapi_events", outcome="error"
             ).inc()
-            raise
+            logger.warning(
+                "Event lookup failed location=%s country_code=%s error_type=%s",
+                location_name,
+                country_code,
+                type(error).__name__,
+            )
+            return []
         limited_events = events[: settings.EVENT_SEARCH_LIMIT]
         self.events_cache.set(cache_key, limited_events)
         return limited_events
@@ -316,13 +313,13 @@ class TravelContextService:
         return weather
 
 
-def _google_country_code(country_code: str | None) -> str:
+def _google_country_code(country_code: str | None) -> str | None:
     normalized = (country_code or "").lower().strip()
     if normalized in GERMANY_ALIASES:
         return "de"
     if len(normalized) == 2:
         return normalized
-    return COUNTRY_CODE_FALLBACK
+    return None
 
 
 def _date_filter(start_date: date, end_date: date) -> str | None:

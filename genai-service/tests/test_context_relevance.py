@@ -68,3 +68,18 @@ async def test_ai_classifier_failure_defaults_to_fetching_events_context():
 
     assert decision.should_fetch_events_context is True
     assert decision.source == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_ai_classifier_rejects_string_boolean():
+    llm = ClassifierLLMProvider(
+        '{"shouldFetchEventsContext": "false", "reason": "Not relevant."}'
+    )
+    classifier = ContextRelevanceClassifier()
+
+    decision = await classifier.should_fetch_events_context(
+        preferences("Lisbon", "surprise me"), llm
+    )
+
+    assert decision.should_fetch_events_context is True
+    assert decision.source == "fallback"
