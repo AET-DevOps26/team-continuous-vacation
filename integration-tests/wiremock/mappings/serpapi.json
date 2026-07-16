@@ -1,0 +1,26 @@
+{
+  "name": "SerpAPI google events",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/serpapi/search.*"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "events_results": [
+        {
+          "title": "Stub City Festival",
+          "description": "A stubbed event for CI.",
+          "date": {
+            "start_date": "Jun 1",
+            "when": "Jun 1, 10:00 AM"
+          },
+          "address": [
+            "Munich, Germany"
+          ],
+          "link": "https://example.invalid/event"
+        }
+      ]
+    }
+  }
+}

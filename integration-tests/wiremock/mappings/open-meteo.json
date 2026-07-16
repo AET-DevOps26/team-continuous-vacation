@@ -1,0 +1,11 @@
+{
+  "name": "Open-Meteo forecast and archive",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/open-meteo/(forecast|archive).*"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {}
+  }
+}

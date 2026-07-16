@@ -138,21 +138,45 @@ Run commands from the module directory unless noted.
 | GenAI Service | `flake8 app tests && mypy app && python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
 | Travel Context Service | `flake8 app tests && mypy app && python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
 | Full local stack | `docker compose up --build` | Not applicable; use module coverage commands. |
+| Cross-service integration | See `integration-tests/README.md` | Not applicable; covers wiring, not lines. |
 
 Python services expect dependencies from `requirements.txt` and `requirements-dev.txt` to be installed in the active virtual environment.
+
+### Cross-service integration tests
+
+The module suites stub each other out, so none of them can catch a contract drift between two
+services. `integration-tests/` closes that gap: it runs the real stack and fakes only third-party
+APIs (the LLM, Nominatim, SerpAPI, Open-Meteo) with a WireMock container from
+`docker-compose.ci.yml`.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ci.yml up --build --detach --wait
+bash scripts/docker-compose-smoke.sh
+pip install -r integration-tests/requirements.txt && pytest integration-tests
+docker compose -f docker-compose.yml -f docker-compose.ci.yml down --volumes --remove-orphans
+```
+
+Pass both `-f` flags to every compose command; see `integration-tests/README.md` for the stub
+contracts and for debugging a mismatch.
 
 ## CI/CD
 
 GitHub Actions runs `.github/workflows/ci.yaml` for every pull request targeting `main` and every push to `main`. The pipeline treats all quality checks as blocking:
 
 - Frontend: ESLint, Vitest with coverage, TypeScript compilation, and the production build.
-- Kotlin services: Gradle build, JUnit tests, JaCoCo coverage, and Detekt static analysis through the Gradle `check` lifecycle.
+- Kotlin services: Detekt static analysis as its own step, then the Gradle build, JUnit tests, and JaCoCo coverage.
 - Python services: Flake8 over application and test code, mypy type checking, and pytest with coverage.
-- Full stack: Docker Compose image builds after every service job succeeds.
+- Full stack: Docker Compose image builds after every service job succeeds, then a smoke test and the cross-service integration tests.
 
 Coverage reports are uploaded as workflow artifacts. Deployment and container-image workflows are defined separately in `.github/workflows/`.
 
-Each Kotlin service keeps a reviewed `detekt-baseline.xml` for findings that predate enforcement. The baseline records those findings while Detekt fails the build for every new violation. Baselines should only be regenerated after the recorded findings have been reviewed or fixed.
+Detekt findings are uploaded as SARIF (merged across source sets into one file), so they appear as GitHub code scanning alerts and inline annotations on the pull request diff rather than only in the job log.
+
+Detekt currently **reports rather than blocks** (`ignoreFailures = true` in `backend/build.gradle.kts`). There is deliberately no baseline file: a baseline exists to freeze pre-existing findings so a build can fail on new ones, which suits a codebase too large to clean up in one go. This backend is small enough that a baseline would mostly park real findings in an XML nobody reads, so the open findings are visible in code scanning instead.
+
+The trade-off is that new violations do not fail the build either. Once the open findings are fixed, flip `ignoreFailures` to `false` to make Detekt blocking.
+
+`check` runs `detektMain`/`detektTest` rather than the plugin's default `detekt` task, so a local `./gradlew build` reports exactly what CI reports. Those tasks analyse with type resolution and catch strictly more.
 
 ## Monitoring & Observability
 

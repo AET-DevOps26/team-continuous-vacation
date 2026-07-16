@@ -1,0 +1,17 @@
+{
+  "name": "Nominatim geocoding",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/nominatim/search.*"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": [
+      {
+        "lat": "48.137154",
+        "lon": "11.576124",
+        "display_name": "Munich, Bavaria, Germany"
+      }
+    ]
+  }
+}
