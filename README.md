@@ -1,5 +1,10 @@
 # Continuous Vacation (Dynamic Travel Itinerary Builder)
 
+## Deployments
+
+- **Azure:** https://tum-triptailor-354f93b6.polandcentral.cloudapp.azure.com/
+- **AET Kubernetes:** https://team-continuous-vacation.stud.k8s.aet.cit.tum.de/
+
 ## Problem Statement
 
 Planning a trip is often overwhelming, requiring travelers to juggle multiple websites, blogs, and notes to build a coherent daily schedule. While standard AI tools can suggest itineraries, they usually provide static, overwhelming walls of text. If a traveler needs to change one detail—like swapping an outdoor activity due to rain—they have to start over, which often messes up the rest of the timeline. This application solves this by providing a dynamic, visual itinerary where individual time blocks can be independently adjusted, saved, and managed with ease.
