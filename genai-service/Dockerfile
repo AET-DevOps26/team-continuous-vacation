@@ -14,16 +14,14 @@ RUN pip install --no-cache-dir --upgrade pip setuptools
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Run as a non-root user (Dockle CIS-DI-0001 / KICS run-as-root)
 RUN useradd --create-home --uid 10001 appuser
 
 # Copy application code
 COPY app/ ./app/
 
+RUN chown -R appuser /app
 USER 10001
-
-# Run as a non-root user (Dockle CIS-DI-0001 / KICS run-as-root)
-RUN useradd -r -u 1001 appuser && chown -R appuser /app
-USER appuser
 
 # Expose port
 EXPOSE 8000
