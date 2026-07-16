@@ -12,6 +12,16 @@ tracing:
   otlpEndpoint: http://tempo:4318/v1/traces
   samplingProbability: "1.0"
 
+networkPolicy:
+  enabled: true
+  # Labels used by the ingress controller pods that forward public traffic to
+  # this release. Override these when the cluster uses a different controller.
+  ingressController:
+    namespaceLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+    podLabels:
+      app.kubernetes.io/name: ingress-nginx
+
 postgres:
   enabled: true
   image:

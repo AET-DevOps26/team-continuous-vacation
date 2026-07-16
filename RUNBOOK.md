@@ -1272,6 +1272,28 @@ The Helm chart uses service names that match Docker Compose:
 | `grafana` | `3000` |
 | `tempo` | `3200`, `4317`, `4318` |
 
+#### 17.3.1 Network policies
+
+The Helm chart enables `networkPolicy.enabled` by default. A release-scoped
+default-deny policy is combined with explicit policies for every workload:
+gateway ingress to public services, backend-to-persistence and backend-to-GenAI,
+GenAI-to-travel-context, persistence-to-Postgres, Prometheus scraping, Tempo
+tracing, Grafana data sources, DNS, and external HTTPS provider calls.
+
+The defaults expect an ingress-nginx controller in the `ingress-nginx` namespace.
+Override `networkPolicy.ingressController.namespaceLabels` and `podLabels` when
+the cluster uses different controller labels. Check the installed labels before
+enabling ingress:
+
+```bash
+kubectl get pods --all-namespaces --show-labels | grep -i ingress
+helm template triptailor infrastructure/kubernetes/triptailor -f my-values.yaml
+```
+
+NetworkPolicies require a CNI plugin that enforces them. They introduce no new
+application secrets. Set `networkPolicy.enabled=false` only for troubleshooting
+on clusters without NetworkPolicy support.
+
 ### 17.4 Local Kubernetes Monitoring Access
 
 If services are not exposed publicly, use port-forward:
