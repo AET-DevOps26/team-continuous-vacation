@@ -10,6 +10,9 @@ The chart mirrors the working `docker-compose.yml` topology:
 - `backend`: Spring Boot app API on port 8080
 - `frontend`: nginx-served React app on port 3000
 
+The PostgreSQL schema and persistent storage behavior are documented in
+[`../../docs/database.md`](../../docs/database.md).
+
 The service names intentionally match Docker Compose. Public traffic enters through one gateway-style edge:
 
 ```text
