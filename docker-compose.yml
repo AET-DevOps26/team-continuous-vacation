@@ -81,8 +81,12 @@ services:
     build:
       context: ./genai-service
     container_name: triptailor-genai
-    expose:
-      - "8000"
+    # Internal service: the frontend never calls it directly, but the port is
+    # published so Swagger UI's "Try it out" works against the gen-ai.yaml
+    # contract, mirroring travel-context-service. Not internet-reachable in
+    # Azure — the NSG only opens 22/80/443/3000.
+    ports:
+      - "8000:8000"
     environment:
       - TRAVEL_CONTEXT_BASE_URL=http://travel-context-service:8090
       - OTEL_SERVICE_NAME=genai-service
