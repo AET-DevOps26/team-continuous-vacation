@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.config.settings import settings
 from app.models.schemas import GenerationPreferences
@@ -22,6 +22,11 @@ class TicketLink(BaseModel):
     link: str
     linkType: Optional[str] = None
 
+    @field_validator("link")
+    @classmethod
+    def validate_link(cls, value: str) -> str:
+        return _http_url(value)
+
 
 class EventCandidate(BaseModel):
     source: str = "serpapi_google_events"
@@ -37,6 +42,11 @@ class EventCandidate(BaseModel):
     ticketLinks: list[TicketLink] = Field(default_factory=list)
     thumbnail: Optional[str] = None
     score: float = 0.0
+
+    @field_validator("link", "thumbnail")
+    @classmethod
+    def validate_optional_link(cls, value: Optional[str]) -> Optional[str]:
+        return _http_url(value) if value is not None else None
 
 
 class WeatherBlock(BaseModel):
@@ -70,10 +80,19 @@ class TravelContextClient:
         base_url: str = settings.TRAVEL_CONTEXT_BASE_URL,
         timeout_seconds: float = settings.TRAVEL_CONTEXT_TIMEOUT_SECONDS,
         enabled: bool = settings.TRAVEL_CONTEXT_ENABLED,
+        client: httpx.AsyncClient | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.enabled = enabled
+        self.client = (
+            client
+            if client is not None
+            else httpx.AsyncClient(timeout=self.timeout_seconds)
+            if enabled
+            else None
+        )
+        self._owns_client = client is None and self.client is not None
 
     async def get_trip_context(
         self,
@@ -82,6 +101,8 @@ class TravelContextClient:
     ) -> Optional[TravelContext]:
         if not self.enabled:
             return None
+        if self.client is None:
+            raise RuntimeError("Enabled travel-context client has no HTTP client")
 
         payload = {
             "destination": preferences.destination,
@@ -95,12 +116,11 @@ class TravelContextClient:
                 span.set_attribute("trip.destination", preferences.destination)
                 span.set_attribute("trip.include_events", include_events)
                 span.set_attribute("peer.service", "travel-context-service")
-                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                    response = await client.post(
-                        f"{self.base_url}/trip-context", json=payload
-                    )
-                    response.raise_for_status()
-                    return TravelContext.model_validate(response.json())
+                response = await self.client.post(
+                    f"{self.base_url}/trip-context", json=payload
+                )
+                response.raise_for_status()
+                return TravelContext.model_validate(response.json())
         except Exception as error:
             logger.warning(
                 "Travel context lookup failed destination=%s error=%s",
@@ -108,3 +128,13 @@ class TravelContextClient:
                 error,
             )
             return None
+
+    async def aclose(self) -> None:
+        if self._owns_client and self.client is not None and hasattr(self.client, "aclose"):
+            await self.client.aclose()
+
+
+def _http_url(value: str) -> str:
+    if not value.startswith(("http://", "https://")):
+        raise ValueError("URL must use http or https")
+    return value

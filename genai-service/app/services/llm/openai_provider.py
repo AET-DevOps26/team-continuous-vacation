@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 import httpx
-from openai import AzureOpenAI
+from openai import APIError, APITimeoutError, AzureOpenAI
 
 from app.observability.metrics import (
     LLM_REQUESTED_TOKENS,
@@ -11,6 +11,10 @@ from app.observability.metrics import (
     LLM_USAGE_TOKENS_TOTAL,
 )
 from app.services.llm.base import LLMGenerationOptions, LLMProvider
+from app.services.llm.base import (
+    LLMProviderResponseError,
+    LLMProviderTimeoutError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +22,18 @@ logger = logging.getLogger(__name__)
 class OpenAIProvider(LLMProvider):
     """OpenAI provider using httpx for OpenAI-compatible APIs."""
 
-    def __init__(self, api_key: str, base_url: str, model_name: str):
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        model_name: str,
+        client: httpx.AsyncClient | None = None,
+    ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model_name = model_name
+        self.http_client = client or httpx.AsyncClient(timeout=60.0)
+        self._owns_client = client is None
 
     async def generate(self, prompt: str, options: LLMGenerationOptions) -> str:
         """
@@ -44,10 +56,19 @@ class OpenAIProvider(LLMProvider):
             _generation_controls(payload),
         )
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                url, headers=headers, json=payload, timeout=60.0
+        try:
+            response = await _post_with_retry(
+                self.http_client,
+                url,
+                headers=headers,
+                payload=payload,
             )
+        except httpx.TimeoutException as error:
+            raise LLMProviderTimeoutError("LLM request timed out") from error
+        except httpx.HTTPError as error:
+            raise LLMProviderResponseError("LLM request failed") from error
+
+        try:
             logger.debug(
                 "Received LLM HTTP response provider=openai-compatible "
                 "status_code=%s response_bytes=%s",
@@ -56,7 +77,7 @@ class OpenAIProvider(LLMProvider):
             )
 
             if response.status_code != 200:
-                raise Exception(
+                raise LLMProviderResponseError(
                     f"OpenAI API error: {response.status_code}"
                 )
 
@@ -76,11 +97,21 @@ class OpenAIProvider(LLMProvider):
                 len(content or ""),
             )
             if not content:
-                raise Exception(
+                raise LLMProviderResponseError(
                     "OpenAI-compatible response did not include message content "
                     f"(finish_reason={choice.get('finish_reason')}, usage={data.get('usage')})"
                 )
             return content
+        except LLMProviderResponseError:
+            raise
+        except (KeyError, IndexError, TypeError, ValueError) as error:
+            raise LLMProviderResponseError(
+                "OpenAI-compatible response had an invalid structure"
+            ) from error
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self.http_client.aclose()
 
     def _build_payload(
         self, prompt: str, options: LLMGenerationOptions
@@ -126,11 +157,10 @@ class AzureOpenAIProvider(OpenAIProvider):
         deployment_name: str,
         api_version: str,
     ):
-        super().__init__(
-            api_key=api_key,
-            base_url=base_url,
-            model_name=deployment_name,
-        )
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model_name = deployment_name
+        self._owns_client = False
         self.api_version = api_version
         self.client = AzureOpenAI(
             api_version=api_version,
@@ -164,9 +194,14 @@ class AzureOpenAIProvider(OpenAIProvider):
             _message_lengths(payload["messages"]),
             _generation_controls(payload),
         )
-        response = await asyncio.to_thread(
-            lambda: self.client.chat.completions.create(**payload)
-        )
+        try:
+            response = await asyncio.to_thread(
+                lambda: self.client.chat.completions.create(**payload)
+            )
+        except APITimeoutError as error:
+            raise LLMProviderTimeoutError("Azure OpenAI request timed out") from error
+        except APIError as error:
+            raise LLMProviderResponseError("Azure OpenAI request failed") from error
         choice = response.choices[0]
         content = choice.message.content
         finish_reason = getattr(choice, "finish_reason", None)
@@ -184,11 +219,14 @@ class AzureOpenAIProvider(OpenAIProvider):
             len(content or ""),
         )
         if not content:
-            raise Exception(
+            raise LLMProviderResponseError(
                 "Azure OpenAI response did not include message content "
                 f"(finish_reason={finish_reason}, usage={usage})"
             )
         return content
+
+    async def aclose(self) -> None:
+        await asyncio.to_thread(self.client.close)
 
 
 def _uses_completion_token_limit(model_name: str) -> bool:
@@ -247,3 +285,24 @@ def _record_usage_tokens(provider: str, model: str, usage: Any) -> None:
                 model=model,
                 token_type=token_type,
             ).inc(value)
+
+
+async def _post_with_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    attempts: int = 3,
+) -> httpx.Response:
+    retryable_statuses = {429, 500, 502, 503, 504}
+    for attempt in range(attempts):
+        try:
+            response = await client.post(url, headers=headers, json=payload)
+        except (httpx.TimeoutException, httpx.NetworkError):
+            if attempt == attempts - 1:
+                raise
+        else:
+            if response.status_code not in retryable_statuses or attempt == attempts - 1:
+                return response
+        await asyncio.sleep(0.1 * (2**attempt))
+    raise RuntimeError("retry loop exited unexpectedly")

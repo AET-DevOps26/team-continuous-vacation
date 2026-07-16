@@ -1,6 +1,9 @@
 from fastapi.testclient import TestClient
 
-from app.api.routes.context import get_travel_context_service
+from app.api.routes.context import (
+    close_travel_context_service,
+    get_travel_context_service,
+)
 from app.main import app
 from app.models.schemas import Coordinates, EventCandidate, TripContextResponse
 
@@ -125,3 +128,14 @@ def test_trip_context_endpoint_rejects_reversed_dates():
     )
 
     assert response.status_code == 422
+
+
+async def test_default_dependency_reuses_and_closes_service():
+    get_travel_context_service.cache_clear()
+
+    first = get_travel_context_service()
+    second = get_travel_context_service()
+
+    assert first is second
+    await close_travel_context_service()
+    assert get_travel_context_service.cache_info().currsize == 0

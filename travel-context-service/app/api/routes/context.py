@@ -16,6 +16,12 @@ def get_travel_context_service() -> TravelContextService:
     return TravelContextService()
 
 
+async def close_travel_context_service() -> None:
+    if get_travel_context_service.cache_info().currsize:
+        await get_travel_context_service().aclose()
+        get_travel_context_service.cache_clear()
+
+
 @router.post("/trip-context", response_model=TripContextResponse, tags=["Travel Context"])
 async def get_trip_context(
     request: TripContextRequest,

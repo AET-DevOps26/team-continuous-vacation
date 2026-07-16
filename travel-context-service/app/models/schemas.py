@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Coordinates(BaseModel):
@@ -43,6 +43,11 @@ class TicketLink(BaseModel):
     link: str
     linkType: Optional[str] = None
 
+    @field_validator("link")
+    @classmethod
+    def validate_link(cls, value: str) -> str:
+        return _http_url(value)
+
 
 class EventCandidate(BaseModel):
     source: str = "serpapi_google_events"
@@ -58,6 +63,11 @@ class EventCandidate(BaseModel):
     ticketLinks: list[TicketLink] = Field(default_factory=list)
     thumbnail: Optional[str] = None
     score: float = Field(default=0.0, ge=0)
+
+    @field_validator("link", "thumbnail")
+    @classmethod
+    def validate_optional_link(cls, value: Optional[str]) -> Optional[str]:
+        return _http_url(value) if value is not None else None
 
 
 TimeBlock = Literal["MORNING", "NOON", "AFTERNOON", "EVENING", "NIGHT"]
@@ -90,3 +100,9 @@ class TripContextResponse(BaseModel):
     coordinates: Coordinates
     events: list[EventCandidate] = Field(default_factory=list)
     weather: list[WeatherDaily] = Field(default_factory=list)
+
+
+def _http_url(value: str) -> str:
+    if not value.startswith(("http://", "https://")):
+        raise ValueError("URL must use http or https")
+    return value

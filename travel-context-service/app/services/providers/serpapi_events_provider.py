@@ -7,14 +7,22 @@ from typing import Any
 import httpx
 
 from app.models.schemas import EventCandidate, TicketLink
+from app.services.http_retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
 
 class SerpApiEventsProvider:
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        client: httpx.AsyncClient | None = None,
+    ):
         self.base_url = base_url
         self.api_key = api_key
+        self.client = client or httpx.AsyncClient(timeout=15.0)
+        self._owns_client = client is None
 
     async def search_events(
         self,
@@ -41,21 +49,22 @@ class SerpApiEventsProvider:
 
         safe_params = {key: value for key, value in params.items() if key != "api_key"}
         logger.info("Starting SerpApi event search params=%s", safe_params)
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(self.base_url, params=params)
-            logger.info(
-                "SerpApi response status=%s response_bytes=%s",
+        response = await request_with_retry(
+            lambda: self.client.get(self.base_url, params=params)
+        )
+        logger.info(
+            "SerpApi response status=%s response_bytes=%s",
+            response.status_code,
+            len(response.content),
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "SerpApi error status=%s body=%r",
                 response.status_code,
-                len(response.content),
+                response.text[:1000],
             )
-            if response.status_code >= 400:
-                logger.warning(
-                    "SerpApi error status=%s body=%r",
-                    response.status_code,
-                    response.text[:1000],
-                )
-            response.raise_for_status()
-            payload = response.json()
+        response.raise_for_status()
+        payload = response.json()
 
         if payload.get("error"):
             raise RuntimeError(f"SerpApi event search failed: {payload['error']}")
@@ -70,6 +79,10 @@ class SerpApiEventsProvider:
             [{"title": event.title, "score": event.score} for event in ranked[:10]],
         )
         return ranked
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self.client.aclose()
 
 
 def _map_event(raw_event: dict[str, Any]) -> EventCandidate:

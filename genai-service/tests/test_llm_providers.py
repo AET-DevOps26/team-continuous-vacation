@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 import httpx
 
-from app.services.llm.base import LLMGenerationOptions
+from app.services.llm.base import LLMGenerationOptions, LLMProviderTimeoutError
 from app.services.llm.factory import LLMProviderFactory
 from app.services.llm.openai_provider import AzureOpenAIProvider, OpenAIProvider
 
@@ -165,8 +165,12 @@ async def test_openai_compatible_provider_raises_on_http_error(monkeypatch):
                 request=httpx.Request("POST", url),
             )
 
-    monkeypatch.setattr(httpx, "AsyncClient", FailingAsyncClient)
-    provider = OpenAIProvider("test-key", "http://local-llm.example/v1", "llama3")
+    provider = OpenAIProvider(
+        "test-key",
+        "http://local-llm.example/v1",
+        "llama3",
+        client=FailingAsyncClient(),
+    )
 
     with pytest.raises(Exception) as exc_info:
         await provider.generate(
@@ -194,10 +198,14 @@ async def test_openai_compatible_provider_propagates_timeout(monkeypatch):
         async def post(self, url, headers=None, json=None, timeout=None):
             raise httpx.TimeoutException("request timed out")
 
-    monkeypatch.setattr(httpx, "AsyncClient", TimingOutAsyncClient)
-    provider = OpenAIProvider("test-key", "http://local-llm.example/v1", "llama3")
+    provider = OpenAIProvider(
+        "test-key",
+        "http://local-llm.example/v1",
+        "llama3",
+        client=TimingOutAsyncClient(),
+    )
 
-    with pytest.raises(httpx.TimeoutException, match="request timed out"):
+    with pytest.raises(LLMProviderTimeoutError, match="LLM request timed out"):
         await provider.generate(
             "Generate a trip",
             LLMGenerationOptions(
@@ -206,4 +214,67 @@ async def test_openai_compatible_provider_propagates_timeout(monkeypatch):
                 system_prompt="Return JSON",
                 json_mode=True,
             ),
+        )
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_provider_parses_success_response():
+    class SuccessfulClient:
+        async def post(self, url, headers=None, json=None):
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {"content": '{"days": []}'},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 5,
+                        "total_tokens": 15,
+                    },
+                },
+                request=httpx.Request("POST", url),
+            )
+
+    provider = OpenAIProvider(
+        "test-key",
+        "http://local-llm.example/v1",
+        "llama3",
+        client=SuccessfulClient(),
+    )
+
+    response = await provider.generate(
+        "Generate a trip",
+        LLMGenerationOptions(0.7, 1000, "Return JSON", True),
+    )
+
+    assert response == '{"days": []}'
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_provider_rejects_malformed_envelope():
+    from app.services.llm.base import LLMProviderResponseError
+
+    class MalformedClient:
+        async def post(self, url, headers=None, json=None):
+            return httpx.Response(
+                200,
+                json={"choices": []},
+                request=httpx.Request("POST", url),
+            )
+
+    provider = OpenAIProvider(
+        "test-key",
+        "http://local-llm.example/v1",
+        "llama3",
+        client=MalformedClient(),
+    )
+
+    with pytest.raises(LLMProviderResponseError, match="invalid structure"):
+        await provider.generate(
+            "Generate a trip",
+            LLMGenerationOptions(0.7, 1000, "Return JSON", True),
         )

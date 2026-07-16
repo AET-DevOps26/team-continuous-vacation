@@ -7,6 +7,7 @@ from typing import Any, Literal
 import httpx
 
 from app.models.schemas import Coordinates, WeatherBlock, WeatherDaily
+from app.services.http_retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +72,13 @@ class OpenMeteoWeatherProvider:
         forecast_base_url: str,
         archive_base_url: str,
         forecast_max_days: int,
+        client: httpx.AsyncClient | None = None,
     ):
         self.forecast_base_url = forecast_base_url
         self.archive_base_url = archive_base_url
         self.forecast_max_days = forecast_max_days
+        self.client = client or httpx.AsyncClient(timeout=15.0)
+        self._owns_client = client is None
 
     async def get_weather(
         self,
@@ -186,23 +190,28 @@ class OpenMeteoWeatherProvider:
             range_end,
             include_probability,
         )
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(base_url, params=params)
-            logger.info(
-                "Open-Meteo response status=%s response_bytes=%s",
+        response = await request_with_retry(
+            lambda: self.client.get(base_url, params=params)
+        )
+        logger.info(
+            "Open-Meteo response status=%s response_bytes=%s",
+            response.status_code,
+            len(response.content),
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "Open-Meteo error status=%s body=%r",
                 response.status_code,
-                len(response.content),
+                response.text[:1000],
             )
-            if response.status_code >= 400:
-                logger.warning(
-                    "Open-Meteo error status=%s body=%r",
-                    response.status_code,
-                    response.text[:1000],
-                )
-            response.raise_for_status()
-            payload = response.json()
+        response.raise_for_status()
+        payload = response.json()
 
         return _bucket_hourly(payload.get("hourly") or {})
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self.client.aclose()
 
 
 def _inclusive_dates(start_date: date, end_date: date) -> list[date]:

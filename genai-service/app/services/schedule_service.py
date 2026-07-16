@@ -236,6 +236,10 @@ class ScheduleService:
                     options=options,
                 )
 
+    async def aclose(self) -> None:
+        await self.travel_context_client.aclose()
+        await self.llm_provider.aclose()
+
     def _load_json(self, response_text: str, generation_name: str) -> dict:
         cleaned = response_text.strip()
         if not cleaned:

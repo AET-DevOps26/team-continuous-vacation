@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 
+import httpx
+
 from app.config.settings import settings
 from app.models.schemas import (
     EventCandidate,
@@ -42,23 +44,51 @@ class TravelContextService:
         events_cache: TtlCache[list[EventCandidate]] | None = None,
         weather_cache: TtlCache[list[WeatherDaily]] | None = None,
     ):
+        needs_http_client = any(
+            provider is None
+            for provider in (
+                geocoder,
+                fallback_geocoder,
+                events_provider,
+                weather_provider,
+            )
+        )
+        self.http_client = (
+            httpx.AsyncClient(
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+            )
+            if needs_http_client
+            else None
+        )
         self.geocoder = geocoder or NominatimProvider(
-            settings.NOMINATIM_BASE_URL, settings.HTTP_USER_AGENT
+            settings.NOMINATIM_BASE_URL,
+            settings.HTTP_USER_AGENT,
+            client=self.http_client,
         )
         self.fallback_geocoder = fallback_geocoder or PhotonProvider(
-            settings.PHOTON_BASE_URL, settings.HTTP_USER_AGENT
+            settings.PHOTON_BASE_URL,
+            settings.HTTP_USER_AGENT,
+            client=self.http_client,
         )
         self.events_provider = events_provider or SerpApiEventsProvider(
-            settings.SERPAPI_BASE_URL, settings.SERPAPI_API_KEY
+            settings.SERPAPI_BASE_URL,
+            settings.SERPAPI_API_KEY,
+            client=self.http_client,
         )
         self.weather_provider = weather_provider or OpenMeteoWeatherProvider(
             settings.OPEN_METEO_FORECAST_BASE_URL,
             settings.OPEN_METEO_ARCHIVE_BASE_URL,
             settings.WEATHER_FORECAST_MAX_DAYS,
+            client=self.http_client,
         )
         self.geocode_cache = geocode_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.events_cache = events_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.weather_cache = weather_cache or TtlCache(settings.CACHE_TTL_SECONDS)
+
+    async def aclose(self) -> None:
+        if self.http_client is not None:
+            await self.http_client.aclose()
 
     async def build_trip_context(
         self, request: TripContextRequest

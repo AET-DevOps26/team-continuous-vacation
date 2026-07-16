@@ -10,7 +10,7 @@ from app.services.providers.open_meteo_provider import (
     _historical_reference,
 )
 from app.services.providers.photon_provider import PhotonProvider
-from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
+from app.services.providers.serpapi_events_provider import SerpApiEventsProvider, _map_event
 
 
 @pytest.mark.asyncio
@@ -174,6 +174,28 @@ async def test_serpapi_events_timeout_propagates(monkeypatch):
 
     with pytest.raises(httpx.TimeoutException, match="serpapi timed out"):
         await provider.search_events("Munich", "de")
+
+
+def test_serpapi_rejects_non_http_links():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="URL must use http or https"):
+        _map_event(
+            {
+                "title": "Unsafe event",
+                "link": "javascript:alert(1)",
+                "date": {"when": "Tomorrow"},
+            }
+        )
+
+
+def test_coordinates_reject_out_of_range_values():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Coordinates(lat=91, lon=11)
+    with pytest.raises(ValidationError):
+        Coordinates(lat=48, lon=-181)
 
 
 def _hourly_payload(start: date, end: date, include_probability: bool) -> dict:

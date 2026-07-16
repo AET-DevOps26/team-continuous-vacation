@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -12,10 +13,18 @@ logging.basicConfig(
     format="%(levelname)s:%(name)s:trace_id=%(otelTraceID)s span_id=%(otelSpanID)s:%(message)s",
 )
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await schedules.close_schedule_service()
+
+
 app = FastAPI(
     title="TripTailor — GenAI API",
     description="Internal AI generation engine. Consumed only by the App API. Not exposed to the frontend.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 configure_observability(app, "genai-service")

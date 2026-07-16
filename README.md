@@ -134,7 +134,9 @@ Run commands from the module directory unless noted.
 | Travel Context Service | `flake8 app tests && mypy app && python -m pytest --verbose` | `python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html` |
 | Full local stack | `docker compose up --build` | Not applicable; use module coverage commands. |
 
-Python services expect dependencies from `requirements.txt` and `requirements-dev.txt` to be installed in the active virtual environment.
+Python services use Python 3.11 in CI and container images. Recreate local
+virtual environments with Python 3.11 and install dependencies from
+`requirements.txt` and `requirements-dev.txt` to avoid version-specific drift.
 
 ## CI/CD
 
