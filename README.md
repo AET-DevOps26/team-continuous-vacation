@@ -86,6 +86,10 @@ The backend owns durable state directly in PostgreSQL through Spring JDBC. For t
 
 All application-owned HTTP service interfaces use JSON and are described in `api-specification/`. The public contract is `frontend.yaml`; internal contracts isolate GenAI and travel-context behavior. Runtime deployment is available through Docker Compose and the Helm chart. Prometheus scrapes every backend service, Grafana visualizes the exported metrics, and Tempo receives distributed traces.
 
+The relational database schema and persistent storage setup are documented in
+[`docs/database.md`](docs/database.md). The executable schema is
+`backend/src/main/resources/schema.sql`.
+
 ### Subsystems and interfaces
 
 | Caller | Callee | Interface | Responsibility |
