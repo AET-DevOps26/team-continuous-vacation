@@ -34,7 +34,7 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         payload = json.loads(self.rfile.read(length) or b"{}")
         prompt = payload.get("messages", [{}, {}])[-1].get("content", "")
-        content = classification() if "Classify whether" in prompt else schedule(prompt)
+        content = route(prompt)
         self.respond({
             "id": "mock-completion", "object": "chat.completion",
             "created": 0, "model": "mock-model",
@@ -54,8 +54,34 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
+def route(prompt):
+    if "Classify whether" in prompt:
+        return classification()
+    if "Create one replacement activity" in prompt:
+        return alternative(prompt)
+    return schedule(prompt)
+
+
 def classification():
     return {"shouldFetchEventsContext": True, "reason": "Mock city trip"}
+
+
+def alternative(prompt):
+    # _validate_alternative_contract rejects a replacement that changes the time block, so
+    # take it from the response shape the prompt asks for rather than guessing. The shape is
+    # the only place the replaced activity's block appears unambiguously -- "timeBlock" also
+    # occurs throughout the serialised trip context.
+    match = re.search(r'exact shape:\s*\{\s*"timeBlock":\s*"(\w+)"', prompt)
+    return {
+        "timeBlock": match.group(1) if match else "AFTERNOON",
+        # Must collide with neither the replaced title nor any other title in the trip, both
+        # of which schedule() builds as "<name> <date>".
+        "title": "Mock Replacement Activity",
+        "description": "Deterministic mocked replacement.",
+        "durationMinutes": 90,
+        "isIndoor": True,
+        "tags": ["INDOOR", "CULTURAL"],
+    }
 
 
 def schedule(prompt):

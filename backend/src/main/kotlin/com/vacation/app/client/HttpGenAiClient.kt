@@ -1,6 +1,7 @@
 package com.vacation.app.client
 
 import com.vacation.app.api.Activity
+import com.vacation.app.api.ApiException
 import com.vacation.app.api.Day
 import com.vacation.app.api.GenerationPreferences
 import com.vacation.app.api.RegenerationInstruction
@@ -24,7 +25,8 @@ class HttpGenAiClient(
 			.bodyValue(preferences)
 			.retrieve()
 			.bodyToMono(Schedule::class.java)
-			.block()!!
+			.block()
+			?: throw emptyGenAiResponse("/schedules")
 
 	override fun suggestAlternative(instruction: RegenerationInstruction, activity: Activity, tripContext: Trip): Activity =
 		webClient.post()
@@ -32,7 +34,13 @@ class HttpGenAiClient(
 			.bodyValue(AlternativeActivityRequest(instruction.instruction, activity, tripContext.toContext()))
 			.retrieve()
 			.bodyToMono(Activity::class.java)
-			.block()!!
+			.block()
+			?: throw emptyGenAiResponse("/activities/alternative")
+
+	// block() returns null on a 2xx with an empty body, which only happens when genai-service
+	// breaks its side of the contract. 502 rather than 500: the fault is upstream, not here.
+	private fun emptyGenAiResponse(uri: String) =
+		ApiException(502, "GENAI_EMPTY_RESPONSE", "The GenAI service returned an empty response for $uri.")
 
 	private fun Trip.toContext(): TripContext =
 		TripContext(destination, startDate, endDate, vibe, schedule.days)
