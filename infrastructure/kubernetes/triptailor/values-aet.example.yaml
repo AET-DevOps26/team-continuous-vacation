@@ -18,11 +18,6 @@ postgres:
     size: 1Gi
     storageClassName: ""
 
-persistenceService:
-  image:
-    repository: ghcr.io/aet-devops26/team-continuous-vacation/persistence-service
-    tag: change-me-to-git-sha
-
 genaiService:
   image:
     repository: ghcr.io/aet-devops26/team-continuous-vacation/genai-service

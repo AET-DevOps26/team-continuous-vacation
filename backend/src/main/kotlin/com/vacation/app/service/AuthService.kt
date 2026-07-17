@@ -5,20 +5,20 @@ import com.vacation.app.api.AuthResponse
 import com.vacation.app.api.LoginRequest
 import com.vacation.app.api.RegisterRequest
 import com.vacation.app.api.TravelerCreateRequest
-import com.vacation.app.client.PersistenceClient
+import com.vacation.app.repository.TripTailorRepository
+import org.springframework.dao.DuplicateKeyException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
-import org.springframework.web.reactive.function.client.WebClientResponseException
 
 @Service
 class AuthService(
-	private val persistenceClient: PersistenceClient,
+	private val repository: TripTailorRepository,
 	private val passwordEncoder: PasswordEncoder,
 	private val tokenService: TokenService,
 ) {
 	fun register(request: RegisterRequest): AuthResponse {
 		try {
-			val traveler = persistenceClient.createTraveler(
+			val traveler = repository.createTraveler(
 				TravelerCreateRequest(
 					email = request.email.lowercase(),
 					passwordHash = passwordEncoder.encode(request.password),
@@ -26,15 +26,15 @@ class AuthService(
 				),
 			)
 			return tokenService.issueTravelerToken(traveler.id, traveler.isDemo)
-		} catch (exception: WebClientResponseException.Conflict) {
+		} catch (exception: DuplicateKeyException) {
 			throw ApiException(409, "EMAIL_ALREADY_REGISTERED", "E-mail Already Registered")
 		}
 	}
 
 	fun login(request: LoginRequest): AuthResponse {
 		val traveler = try {
-			persistenceClient.findTravelerAuthRecordByEmail(request.email.lowercase())
-		} catch (exception: WebClientResponseException.NotFound) {
+			repository.findTravelerAuthRecordByEmail(request.email.lowercase())
+		} catch (exception: ApiException) {
 			throw ApiException(401, "INVALID_CREDENTIALS", "Invalid Credentials")
 		}
 
@@ -45,7 +45,7 @@ class AuthService(
 	}
 
 	fun createDemoSession(): AuthResponse {
-		val traveler = persistenceClient.createTraveler(TravelerCreateRequest(isDemo = true))
+		val traveler = repository.createTraveler(TravelerCreateRequest(isDemo = true))
 		return tokenService.issueTravelerToken(traveler.id, traveler.isDemo)
 	}
 }

@@ -35,7 +35,6 @@ rectangle "TripTailor System" {
   component "Gateway\nNGINX" as Gateway
   component "Web Client\nReact / Refine" as Frontend
   component "Application API\nSpring Boot" as Backend
-  component "Persistence Service\nSpring Boot" as Persistence
   component "GenAI Service\nFastAPI" as GenAI
   component "Travel Context Service\nFastAPI" as Context
   database "PostgreSQL" as Database
@@ -54,9 +53,8 @@ Traveler --> Gateway : HTTPS
 Gateway --> Frontend : /*\nstatic application
 Gateway --> Backend : /api/*\nJSON/HTTPS
 
-Backend --> Persistence : Traveler/trip REST
 Backend --> GenAI : Schedule/alternative REST
-Persistence --> Database : JDBC/SQL
+Backend --> Database : Traveler/trip JDBC/SQL
 GenAI --> LLM : OpenAI-compatible API\nstructured generation
 GenAI --> Context : POST /context
 Context --> Providers : Provider-specific HTTPS APIs

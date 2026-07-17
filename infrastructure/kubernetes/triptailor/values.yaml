@@ -46,22 +46,6 @@ postgres:
       cpu: "1"
       memory: 512Mi
 
-persistenceService:
-  image:
-    repository: triptailor/persistence-service
-    tag: latest
-  service:
-    name: persistence-service
-    port: 8081
-  replicaCount: 1
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: "1"
-      memory: 512Mi
-
 genaiService:
   image:
     repository: triptailor/genai-service

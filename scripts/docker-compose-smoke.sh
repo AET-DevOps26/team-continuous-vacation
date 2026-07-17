@@ -41,7 +41,6 @@ wait_for_internal_http() {
 
 wait_for_http "frontend through gateway" "${GATEWAY_URL}/"
 wait_for_http "backend through gateway" "${GATEWAY_URL}/api/health"
-wait_for_internal_http "persistence service" "http://persistence-service:8081/health"
 wait_for_internal_http "genai service" "http://genai-service:8000/health"
 wait_for_http "travel context service" "${TRAVEL_CONTEXT_URL}/health"
 wait_for_http "Prometheus through gateway" "${GATEWAY_URL}/prometheus/-/healthy"

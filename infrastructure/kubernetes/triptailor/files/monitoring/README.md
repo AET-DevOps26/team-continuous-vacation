@@ -16,9 +16,9 @@ targets read these exact files:
 | Helm chart | `templates/monitoring-prometheus.yaml` loads the files into a ConfigMap via `.Files.Get`. |
 
 This works because **Kubernetes Service names match docker-compose service
-names** (`backend`, `persistence-service`, `genai-service`,
-`travel-context-service`), so the scrape targets in `prometheus/prometheus.yml`
-resolve identically in both environments — no per-environment config.
+names** (`backend`, `genai-service`, `travel-context-service`), so the scrape
+targets in `prometheus/prometheus.yml` resolve identically in both environments
+— no per-environment config.
 
 > The canonical files must physically live inside the chart (`files/monitoring/`)
 > because Helm refuses to read files outside the chart root. The repo-root
@@ -44,7 +44,6 @@ monitoring/
 | Service | Endpoint | Source |
 | --- | --- | --- |
 | `backend` | `/actuator/prometheus` | Spring Boot Actuator + Micrometer |
-| `persistence-service` | `/actuator/prometheus` | Spring Boot Actuator + Micrometer |
 | `genai-service` | `/metrics` | `prometheus-fastapi-instrumentator` + custom metrics |
 | `travel-context-service` | `/metrics` | `prometheus-fastapi-instrumentator` |
 

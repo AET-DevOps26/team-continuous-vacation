@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.test.context.ActiveProfiles
 import org.springframework.web.reactive.function.client.WebClient
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicReference
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference
 		"management.opentelemetry.tracing.export.otlp.endpoint=http://localhost:4318/v1/traces",
 	],
 )
+@ActiveProfiles("test")
 class WebClientTracingTests {
 	@Autowired
 	private lateinit var webClientBuilder: WebClient.Builder

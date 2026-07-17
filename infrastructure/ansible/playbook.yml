@@ -189,7 +189,6 @@
       environment:
         DOCKER_BUILDKIT: "1"
       loop:
-        - persistence-service
         - backend
         - frontend
         - genai-service

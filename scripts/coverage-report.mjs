@@ -22,12 +22,6 @@ const services = [
     parser: parseJacoco,
   },
   {
-    name: "Persistence service",
-    job: "build-persistence-service",
-    report: "persistence-service-coverage/jacocoTestReport.xml",
-    parser: parseJacoco,
-  },
-  {
     name: "GenAI service",
     job: "build-genai",
     report: "genai-service-coverage/coverage.xml",

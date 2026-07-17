@@ -38,11 +38,6 @@ jobs:
             image: backend
             build_contexts: |
               api-spec=./api-specification
-          - service: persistence-service
-            context: ./persistence-service
-            image: persistence-service
-            build_contexts: |
-              api-spec=./api-specification
           - service: genai-service
             context: ./genai-service
             image: genai-service
@@ -163,7 +158,6 @@ jobs:
 
           helm upgrade --install triptailor ./infrastructure/kubernetes/triptailor \
             --namespace "${AET_NAMESPACE}" \
-            --set persistenceService.image.tag="${GITHUB_SHA::7}" \
             --set genaiService.image.tag="${GITHUB_SHA::7}" \
             --set travelContextService.image.tag="${GITHUB_SHA::7}" \
             --set backend.image.tag="${GITHUB_SHA::7}" \
@@ -178,7 +172,6 @@ jobs:
       - name: Wait for rollout
         run: |
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/db --timeout=600s
-          kubectl -n "${AET_NAMESPACE}" rollout status deploy/persistence-service --timeout=600s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/travel-context-service --timeout=600s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/genai-service --timeout=600s
           kubectl -n "${AET_NAMESPACE}" rollout status deploy/backend --timeout=600s

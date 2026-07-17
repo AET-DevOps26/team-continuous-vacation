@@ -50,11 +50,21 @@ spec:
             - name: http
               containerPort: {{ .Values.backend.service.port }}
           env:
-            - name: PERSISTENCE_BASE_URL
+            - name: SPRING_DATASOURCE_URL
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "triptailor.fullname" . }}-config
-                  key: PERSISTENCE_BASE_URL
+                  key: SPRING_DATASOURCE_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "triptailor.fullname" . }}-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "triptailor.fullname" . }}-secret
+                  key: SPRING_DATASOURCE_PASSWORD
             - name: GENAI_BASE_URL
               valueFrom:
                 configMapKeyRef:
