@@ -3,8 +3,8 @@ info:
   title: TripTailor — App API
   description: >
     Public-facing Backend-for-Frontend running on port 8080.
-    Consumed by the React frontend. Orchestrates calls to the
-    Persistence API (8081) and GenAI API (8000).
+    Consumed by the React frontend. Persists travelers and trips in
+    PostgreSQL and orchestrates calls to the GenAI API (8000).
     Authentication uses Spring Security bearer JWTs issued by the Auth
     endpoints. Tokens are valid for 30 days by default.
   version: 1.0.0
@@ -128,7 +128,7 @@ paths:
       summary: Generate and save a new trip
       description: >
         Calls the GenAI API to generate a schedule, then persists
-        the result via the Persistence API.
+        the result in PostgreSQL.
       operationId: generateTrip
       security:
         - bearerAuth: []
@@ -198,10 +198,10 @@ paths:
       tags: [Activities]
       summary: Regenerate a specific activity
       description: >
-        Fetches the current full trip from the Persistence API, then calls
+        Fetches the current full trip from the database, then calls
         the GenAI API with the complete trip as context so the replacement
         activity does not duplicate any existing activity.
-        The new activity is persisted via the Persistence API and returned.
+        The new activity is persisted to the database and returned.
       operationId: regenerateActivity
       security:
         - bearerAuth: []
@@ -369,7 +369,7 @@ components:
       required: [instruction]
       description: >
         The App API automatically attaches the full trip (fetched from the
-        Persistence API) before forwarding to the GenAI API — the frontend
+        database) before forwarding to the GenAI API — the frontend
         only needs to supply the free-text instruction.
       properties:
         instruction:
