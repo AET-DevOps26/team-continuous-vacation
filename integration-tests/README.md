@@ -10,7 +10,8 @@ traffic between our own services -- the thing the unit suites mock out and there
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.ci.yml up --build --detach --wait
-bash scripts/docker-compose-smoke.sh          # readiness gate these tests assume
+# Readiness gate these tests assume. COMPOSE_FILES must match the -f flags above.
+COMPOSE_FILES="-f docker-compose.yml -f docker-compose.ci.yml" bash scripts/docker-compose-smoke.sh
 pip install -r integration-tests/requirements.txt
 pytest integration-tests --verbose
 docker compose -f docker-compose.yml -f docker-compose.ci.yml down --volumes --remove-orphans
