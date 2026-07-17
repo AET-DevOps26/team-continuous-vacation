@@ -26,7 +26,7 @@ async def close_travel_context_service() -> None:
 async def get_trip_context(
     request: TripContextRequest,
     service: TravelContextService = Depends(get_travel_context_service),
-):
+) -> TripContextResponse:
     try:
         return await service.build_trip_context(request)
     except HTTPException:

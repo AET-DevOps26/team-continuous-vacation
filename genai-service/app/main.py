@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -15,7 +16,7 @@ logging.basicConfig(
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
     await schedules.close_schedule_service()
 
@@ -38,13 +39,13 @@ Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     """Health check endpoint"""
     return {"status": "healthy", "service": "genai-service"}
 
 
 @app.get("/ready")
-async def readiness_check():
+async def readiness_check() -> dict[str, str]:
     """Configuration readiness without depending on external provider uptime."""
     return {
         "status": "ready",
@@ -54,6 +55,6 @@ async def readiness_check():
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     """Root endpoint"""
     return {"service": "GenAI Service", "version": "1.0.0", "status": "running"}

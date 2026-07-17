@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -10,7 +11,7 @@ from app.observability import configure_observability
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
     await context.close_travel_context_service()
 
@@ -35,18 +36,18 @@ Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     return {"status": "healthy", "service": "travel-context-service"}
 
 
 @app.get("/ready")
-async def readiness_check():
+async def readiness_check() -> dict[str, str]:
     """Configuration readiness without depending on public provider uptime."""
     return {"status": "ready", "service": "travel-context-service"}
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     return {
         "service": "Travel Context Service",
         "version": "1.0.0",

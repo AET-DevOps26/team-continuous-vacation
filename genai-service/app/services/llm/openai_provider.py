@@ -101,7 +101,7 @@ class OpenAIProvider(LLMProvider):
                     "OpenAI-compatible response did not include message content "
                     f"(finish_reason={choice.get('finish_reason')}, usage={data.get('usage')})"
                 )
-            return content
+            return str(content)
         except LLMProviderResponseError:
             raise
         except (KeyError, IndexError, TypeError, ValueError) as error:
@@ -223,7 +223,7 @@ class AzureOpenAIProvider(OpenAIProvider):
                 "Azure OpenAI response did not include message content "
                 f"(finish_reason={finish_reason}, usage={usage})"
             )
-        return content
+        return str(content)
 
     async def aclose(self) -> None:
         await asyncio.to_thread(self.client.close)

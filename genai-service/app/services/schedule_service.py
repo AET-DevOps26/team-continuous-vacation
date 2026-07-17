@@ -5,7 +5,7 @@ Service for AI-powered schedule generation based on OpenAPI specification
 import logging
 import json
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
@@ -240,7 +240,7 @@ class ScheduleService:
         await self.travel_context_client.aclose()
         await self.llm_provider.aclose()
 
-    def _load_json(self, response_text: str, generation_name: str) -> dict:
+    def _load_json(self, response_text: str, generation_name: str) -> dict[str, Any]:
         cleaned = response_text.strip()
         if not cleaned:
             raise ValueError(f"{generation_name} LLM response was empty")
@@ -253,7 +253,10 @@ class ScheduleService:
             generation_name,
             len(cleaned),
         )
-        return json.loads(cleaned)
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{generation_name} response must be a JSON object")
+        return cast(dict[str, Any], parsed)
 
     def _sanitize_schedule_tags(self, schedule_data: dict[str, Any]) -> None:
         days = schedule_data.get("days")

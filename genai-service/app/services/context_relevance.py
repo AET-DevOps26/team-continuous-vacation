@@ -1,7 +1,7 @@
 import json
 import logging
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, ValidationError
 
@@ -178,13 +178,16 @@ Guidance:
 """.strip()
 
 
-def _load_json(response_text: str) -> dict:
+def _load_json(response_text: str) -> dict[str, Any]:
     cleaned = response_text.strip()
     if cleaned.startswith("```json"):
         cleaned = cleaned.split("```json", 1)[1].split("```", 1)[0].strip()
     elif cleaned.startswith("```"):
         cleaned = cleaned.split("```", 1)[1].split("```", 1)[0].strip()
-    return json.loads(cleaned)
+    parsed = json.loads(cleaned)
+    if not isinstance(parsed, dict):
+        raise ValueError("Classifier response must be a JSON object")
+    return cast(dict[str, Any], parsed)
 
 
 class ContextClassification(BaseModel):

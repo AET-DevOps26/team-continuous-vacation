@@ -48,6 +48,35 @@ wait_for_http "Prometheus through gateway" "${GATEWAY_URL}/prometheus/-/healthy"
 wait_for_http "Grafana through gateway" "${GATEWAY_URL}/grafana/api/health"
 wait_for_http "Tempo" "${TEMPO_URL}/ready"
 
+if docker compose ps --services | grep -qx "mock-providers"; then
+	start_date="$(python3 -c 'from datetime import date,timedelta; print(date.today() + timedelta(days=1))')"
+	end_date="$(python3 -c 'from datetime import date,timedelta; print(date.today() + timedelta(days=2))')"
+	trip_payload="{\"destination\":\"Munich\",\"startDate\":\"${start_date}\",\"endDate\":\"${end_date}\",\"vibe\":\"cultural\"}"
+
+	context_response="$(curl -fsS -H 'Content-Type: application/json' \
+		--data "${trip_payload}" "${TRAVEL_CONTEXT_URL}/trip-context")"
+	python3 -c 'import json,sys; value=json.load(sys.stdin); assert value["events"] and value["weather"]' \
+		<<<"${context_response}"
+	echo "Mocked travel-context provider flow returned events and weather"
+
+	schedule_response="$(docker compose exec -T gateway wget -qO- \
+		--header='Content-Type: application/json' --post-data="${trip_payload}" \
+		http://genai-service:8000/schedules/generate)"
+	python3 -c 'import json,sys; value=json.load(sys.stdin); assert len(value["days"]) == 2' \
+		<<<"${schedule_response}"
+	echo "Mocked GenAI -> travel-context -> provider flow generated a two-day schedule"
+elif [[ "${REAL_PROVIDER_SMOKE:-false}" == "true" ]]; then
+	start_date="$(python3 -c 'from datetime import date,timedelta; print(date.today() + timedelta(days=1))')"
+	end_date="$(python3 -c 'from datetime import date,timedelta; print(date.today() + timedelta(days=2))')"
+	trip_payload="{\"destination\":\"Munich\",\"startDate\":\"${start_date}\",\"endDate\":\"${end_date}\",\"vibe\":\"cultural\"}"
+	schedule_response="$(docker compose exec -T gateway wget -qO- \
+		--header='Content-Type: application/json' --post-data="${trip_payload}" \
+		http://genai-service:8000/schedules/generate)"
+	python3 -c 'import json,sys; value=json.load(sys.stdin); assert len(value["days"]) == 2' \
+		<<<"${schedule_response}"
+	echo "Controlled real-provider/LLM smoke generation succeeded (response not logged)"
+fi
+
 exited_services="$(docker compose ps --status exited --services)"
 if [[ -n "${exited_services}" ]]; then
 	echo "Compose services exited unexpectedly:" >&2

@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from logging import LogRecord
 
 from fastapi import FastAPI
 from opentelemetry import trace
@@ -10,7 +11,8 @@ from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SpanExporter
+from opentelemetry.trace import Tracer
 
 _configured = False
 _log_record_factory_configured = False
@@ -41,11 +43,11 @@ def configure_observability(app: FastAPI, service_name: str) -> None:
     FastAPIInstrumentor.instrument_app(app)
 
 
-def get_tracer(name: str):
+def get_tracer(name: str) -> Tracer:
     return trace.get_tracer(name)
 
 
-def _configured_exporters():
+def _configured_exporters() -> list[SpanExporter]:
     exporters = {
         exporter.strip().lower()
         for exporter in os.getenv("OTEL_TRACES_EXPORTER", "none").split(",")
@@ -55,7 +57,7 @@ def _configured_exporters():
     if "none" in exporters:
         return []
 
-    configured = []
+    configured: list[SpanExporter] = []
     if "otlp" in exporters:
         configured.append(OTLPSpanExporter(endpoint=_otlp_traces_endpoint()))
     if "console" in exporters:
@@ -88,7 +90,7 @@ def _install_log_record_defaults() -> None:
 
     original_factory = logging.getLogRecordFactory()
 
-    def record_factory(*args, **kwargs):
+    def record_factory(*args: object, **kwargs: object) -> LogRecord:
         record = original_factory(*args, **kwargs)
         message = record.getMessage()
         redacted_message = _SECRET_QUERY_PARAM_RE.sub(r"\1<redacted>", message)

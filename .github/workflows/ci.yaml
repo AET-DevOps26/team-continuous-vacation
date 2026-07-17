@@ -241,6 +241,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       COMPOSE_PROJECT_NAME: triptailor-ci
+      COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -249,10 +250,21 @@ jobs:
         run: docker compose config --quiet
       - name: Build Docker images
         run: docker compose build
+      - name: Scan application images
+        run: |
+          for image in $(docker compose images --format '{{.Repository}}:{{.Tag}}' | grep '^triptailor-ci-'); do
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy:0.70.0 image \
+              --exit-code 1 --ignore-unfixed --pkg-types os \
+              --severity HIGH,CRITICAL "${image}"
+          done
       - name: Start Docker Compose stack
         run: docker compose up --detach --wait --wait-timeout 240
       - name: Smoke test Docker Compose stack
         run: bash scripts/docker-compose-smoke.sh
+      - name: Exercise concurrent Python service requests
+        run: python3 scripts/load-test-python-services.py --requests 12 --concurrency 4
       - name: Dump Docker Compose logs
         if: failure()
         run: |

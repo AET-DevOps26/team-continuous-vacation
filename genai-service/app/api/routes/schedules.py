@@ -33,7 +33,7 @@ async def close_schedule_service() -> None:
 async def generate_schedule(
     preferences: GenerationPreferences,
     schedule_service: ScheduleService = Depends(get_schedule_service),
-):
+) -> Schedule:
     """
     Generate a full multi-day schedule
 
@@ -60,7 +60,7 @@ async def generate_schedule(
 async def suggest_alternative_activity(
     request: AlternativeActivityRequest,
     schedule_service: ScheduleService = Depends(get_schedule_service),
-):
+) -> Activity:
     """
     Suggest a replacement for a single activity
 
