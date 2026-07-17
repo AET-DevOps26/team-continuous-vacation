@@ -55,13 +55,22 @@ class AppApiE2ETest {
 
 	@Test
 	fun `home page serves interactive openapi documentation`() {
+		// All three contracts must be offered in the spec selector.
+		val appSpecEntry = """{ url: basePath + "/openapi.yaml", name: "App API (public)" }"""
+		val genAiSpecEntry = """{ url: basePath + "/gen-ai.yaml", name: "GenAI API (internal)" }"""
+		val travelContextSpecEntry =
+			"""{ url: basePath + "/travel-context.yaml", name: "Travel Context API (internal)" }"""
+
 		mockMvc.get("/")
 			.andExpect {
 				status { isOk() }
 				content { string(org.hamcrest.Matchers.containsString("SwaggerUIBundle")) }
-				content { string(org.hamcrest.Matchers.containsString("TripTailor App API")) }
+				content { string(org.hamcrest.Matchers.containsString("TripTailor API")) }
 				content { string(org.hamcrest.Matchers.containsString("triptailorAccessToken")) }
 				content { string(org.hamcrest.Matchers.containsString("requestInterceptor: attachStoredToken")) }
+				content { string(org.hamcrest.Matchers.containsString(appSpecEntry)) }
+				content { string(org.hamcrest.Matchers.containsString(genAiSpecEntry)) }
+				content { string(org.hamcrest.Matchers.containsString(travelContextSpecEntry)) }
 			}
 
 		mockMvc.get("/openapi.yaml")
@@ -71,6 +80,23 @@ class AppApiE2ETest {
 				content { string(org.hamcrest.Matchers.containsString("Public-facing Backend-for-Frontend")) }
 				content { string(org.hamcrest.Matchers.containsString("/health:")) }
 				content { string(org.hamcrest.Matchers.containsString("bearerAuth:")) }
+			}
+	}
+
+	@Test
+	fun `internal service contracts are served without authentication`() {
+		mockMvc.get("/gen-ai.yaml")
+			.andExpect {
+				status { isOk() }
+				content { string(org.hamcrest.Matchers.startsWith("openapi: 3")) }
+				content { string(org.hamcrest.Matchers.containsString("title: TripTailor — GenAI API")) }
+			}
+
+		mockMvc.get("/travel-context.yaml")
+			.andExpect {
+				status { isOk() }
+				content { string(org.hamcrest.Matchers.startsWith("openapi: 3")) }
+				content { string(org.hamcrest.Matchers.containsString("title: TripTailor — Travel Context API")) }
 			}
 	}
 

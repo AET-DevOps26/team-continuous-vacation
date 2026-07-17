@@ -39,6 +39,8 @@ gradle-app.setting
 
 # OpenAPI specs copied from api-specification/ by Gradle
 backend/src/main/resources/openapi.yaml
+backend/src/main/resources/gen-ai.yaml
+backend/src/main/resources/travel-context.yaml
 
 # =========================
 # Frontend (Node / Vite / Refine)
