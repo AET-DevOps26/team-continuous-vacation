@@ -67,11 +67,11 @@ def schedule(prompt):
     current = start
     while current <= end:
         activities = []
-        for block, title in (("morning", "Museum"), ("afternoon", "City Walk"), ("evening", "Dinner")):
+        for block, title in (("MORNING", "Museum"), ("AFTERNOON", "City Walk"), ("EVENING", "Dinner")):
             activities.append({
                 "timeBlock": block, "title": f"{title} {current.isoformat()}",
                 "description": "Deterministic mocked activity.", "durationMinutes": 90,
-                "isIndoor": block != "afternoon", "tags": ["cultural"],
+                "isIndoor": block != "AFTERNOON", "tags": ["CULTURAL"],
             })
         days.append({"dayNumber": len(days) + 1, "date": current.isoformat(), "activities": activities})
         current += timedelta(days=1)
@@ -98,4 +98,5 @@ def weather(query):
     }}
 
 
-ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+if __name__ == "__main__":
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
