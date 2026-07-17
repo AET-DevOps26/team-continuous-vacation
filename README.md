@@ -43,14 +43,14 @@ The travel context service uses SerpApi for Google Events. Create `travel-contex
 
 ## Service Map
 
-TripTailor runs as five application services plus Postgres:
+TripTailor runs as four application services plus Postgres:
 
 | Service | Path | Responsibility |
 | --- | --- | --- |
 | Frontend | `frontend/` | React, Vite, and Refine UI for authentication, trip creation, trip listing, and itinerary editing. |
 | Backend API | `backend/` | Public Spring Boot backend-for-frontend. Owns auth, JWT validation, trip orchestration, PostgreSQL persistence, and calls to internal services. |
 | GenAI Service | `genai-service/` | Internal FastAPI service that prompts the configured LLM and validates structured itinerary output. |
-| Travel Context Service | `travel-context-service/` | Internal FastAPI enrichment service for geocoding, events, places, weather, ranking, and cache-backed provider calls. |
+| Travel Context Service | `travel-context-service/` | Internal FastAPI enrichment service for geocoding, events, weather, ranking, and cache-backed provider calls. |
 | Database | Docker Compose / Helm | PostgreSQL backing the backend. |
 
 In Docker Compose and Kubernetes, the gateway exposes the frontend and routes `/api/*` to the backend. GenAI, travel-context, and Postgres are internal implementation services.
@@ -83,7 +83,7 @@ The same Prometheus + Grafana + Tempo suite ships to both deployment targets:
 
 TripTailor uses independently deployable services with explicit HTTP contracts. The browser loads the React application through the NGINX gateway and sends all application requests to the public Spring Boot backend. That backend is the system's security and orchestration boundary: it authenticates travelers with signed JWTs, validates public requests, coordinates trip generation, and prevents clients from calling internal services directly.
 
-The backend owns durable state directly in PostgreSQL through Spring JDBC. For trip creation and activity regeneration, the backend calls the GenAI service. The GenAI service builds prompts, requests structured output from the configured LLM, validates that output with Pydantic models, and assigns the identifiers required by the application contract. Before schedule generation, it requests destination context from the travel-context service. That service encapsulates geocoding, place, event, and weather providers, including caching and ranking, so provider-specific concerns do not leak into trip orchestration.
+The backend owns durable state directly in PostgreSQL through Spring JDBC. For trip creation and activity regeneration, the backend calls the GenAI service. The GenAI service builds prompts, requests structured output from the configured LLM, validates that output with Pydantic models, and assigns the identifiers required by the application contract. Before schedule generation, it requests destination context from the travel-context service. That service encapsulates geocoding, event, and weather providers, including caching and ranking, so provider-specific concerns do not leak into trip orchestration.
 
 All application-owned HTTP service interfaces use JSON and are described in `api-specification/`. The public contract is `frontend.yaml`; internal contracts isolate GenAI and travel-context behavior. Runtime deployment is available through Docker Compose and the Helm chart. Prometheus scrapes every backend service, Grafana visualizes the exported metrics, and Tempo receives distributed traces.
 
@@ -91,16 +91,52 @@ The relational database schema and persistent storage setup are documented in
 [`docs/database.md`](docs/database.md). The executable schema is
 `backend/src/main/resources/schema.sql`.
 
+### Generation and persistence flow
+
+1. The browser sends `POST /api/trips` to the backend through NGINX.
+2. The backend validates the request and calls GenAI at `POST /schedules`.
+3. GenAI calls travel context at `POST /trip-context`. Nominatim geocodes the
+   destination, with Photon as fallback; the coordinates and country metadata
+   are then used for Open-Meteo weather and optional SerpApi event lookup.
+4. GenAI calls the configured OpenAI-compatible LLM and validates its structured
+   response. Trips may contain at most seven inclusive calendar days.
+5. The backend writes the traveler, trip, days, activities, and tags directly to
+   PostgreSQL using Spring JDBC, then returns the persisted trip to the browser.
+
+Travel context is best effort from GenAI's perspective: a timeout or invalid
+travel-context response is logged and schedule generation continues without
+enrichment. Within travel context, events and weather degrade to empty results;
+geocoding first tries Nominatim and then Photon. The travel-context caches are
+bounded in-memory TTL caches scoped to one service process/pod, not distributed
+across Kubernetes replicas.
+
+### Normal, mocked, and real-provider smoke modes
+
+Application code always performs ordinary HTTP provider calls. The selected
+Compose files decide where those calls go:
+
+| Mode | Command/configuration | Provider behavior |
+| --- | --- | --- |
+| Normal | `docker compose up --build` | Uses provider URLs and LLM settings from the normal environment files. |
+| Deterministic CI | `COMPOSE_FILE=docker-compose.yml:docker-compose.ci.yml docker compose up --build` | Overrides provider base URLs so the same production clients call `mock-providers`. No external provider secrets or costs are required. |
+| Controlled real smoke | `REAL_PROVIDER_SMOKE=true bash scripts/docker-compose-smoke.sh` against the normal stack | Makes one real generation request using locally configured secrets; generated payloads and secrets are not printed. |
+
+In the CI override, `LLM_PROVIDER=local` means an OpenAI-compatible HTTP
+endpoint and points to the mock server. Outside CI it can point to a compatible
+local runtime such as Ollama. The smoke script detects deterministic mode by
+checking whether the merged Compose project contains the `mock-providers`
+service.
+
 ### Subsystems and interfaces
 
 | Caller | Callee | Interface | Responsibility |
 | --- | --- | --- | --- |
 | Browser frontend | Backend API | `/api/*` through NGINX; public OpenAPI contract | Authentication and traveler-facing trip workflows |
 | Backend API | GenAI service | Internal REST; GenAI OpenAPI contract | Schedule generation and contextual activity alternatives |
-| GenAI service | Travel-context service | `POST /context`; travel-context OpenAPI contract | Ranked destination, place, event, and weather context |
+| GenAI service | Travel-context service | `POST /trip-context`; travel-context OpenAPI contract | Geocoding, event, and weather context |
 | Backend API | PostgreSQL | JDBC/SQL | Durable application state (travelers, trips, days, activities) |
 | GenAI service | Configured LLM | OpenAI-compatible HTTPS API | Schema-constrained schedule and activity generation |
-| Travel-context service | External providers | Provider-specific HTTPS APIs | Geocoding, places, events, and weather |
+| Travel-context service | External providers | Provider-specific HTTPS APIs | Geocoding, events, and weather |
 | Prometheus | Runtime services | `/actuator/prometheus` or `/metrics` | Metrics collection and alert evaluation |
 | Runtime services | Tempo | OTLP/HTTP | Distributed trace export |
 | Grafana | Prometheus and Tempo | PromQL and trace queries | Operational dashboards and trace exploration |
@@ -141,7 +177,9 @@ Run commands from the module directory unless noted.
 | Full local stack | `docker compose up --build` | Not applicable; use module coverage commands. |
 | Cross-service integration | See `integration-tests/README.md` | Not applicable; covers wiring, not lines. |
 
-Python services expect dependencies from `requirements.txt` and `requirements-dev.txt` to be installed in the active virtual environment.
+Python services use Python 3.11 in CI and container images. Recreate local
+virtual environments with Python 3.11 and install dependencies from
+`requirements.txt` and `requirements-dev.txt` to avoid version-specific drift.
 
 ### Cross-service integration tests
 

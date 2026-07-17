@@ -1,0 +1,343 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $selectorLabels := include "triptailor.selectorLabels" . }}
+{{- $ingressNamespaceLabels := .Values.networkPolicy.ingressController.namespaceLabels }}
+{{- $ingressPodLabels := .Values.networkPolicy.ingressController.podLabels }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-default-deny
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-frontend
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: frontend
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $ingressNamespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $ingressPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.frontend.service.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-backend
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $ingressNamespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $ingressPodLabels | nindent 14 }}
+        {{- if .Values.monitoring.enabled }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: prometheus
+              {{- $selectorLabels | nindent 14 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.backend.service.port }}
+  egress:
+    {{- if .Values.postgres.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: postgres
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgres.service.port }}
+    {{- end }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: genai-service
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.genaiService.service.port }}
+    {{- include "triptailor.networkPolicyDnsEgress" . | nindent 4 }}
+    {{- include "triptailor.networkPolicyTempoEgress" . | nindent 4 }}
+{{- if .Values.postgres.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-postgres
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: postgres
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgres.service.port }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-genai
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: genai-service
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: backend
+              {{- $selectorLabels | nindent 14 }}
+        {{- if .Values.monitoring.enabled }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: prometheus
+              {{- $selectorLabels | nindent 14 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.genaiService.service.port }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: travel-context-service
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.travelContextService.service.port }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- include "triptailor.networkPolicyDnsEgress" . | nindent 4 }}
+    {{- include "triptailor.networkPolicyTempoEgress" . | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-travel-context
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: travel-context-service
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: genai-service
+              {{- $selectorLabels | nindent 14 }}
+        {{- if .Values.monitoring.enabled }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: prometheus
+              {{- $selectorLabels | nindent 14 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.travelContextService.service.port }}
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- include "triptailor.networkPolicyDnsEgress" . | nindent 4 }}
+    {{- include "triptailor.networkPolicyTempoEgress" . | nindent 4 }}
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-prometheus
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: prometheus
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $ingressNamespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $ingressPodLabels | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: prometheus
+              {{- $selectorLabels | nindent 14 }}
+        {{- if .Values.monitoring.grafana.enabled }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: grafana
+              {{- $selectorLabels | nindent 14 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [backend, genai-service, travel-context-service]
+            matchLabels:
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.backend.service.port }}
+        - protocol: TCP
+          port: {{ .Values.genaiService.service.port }}
+        - protocol: TCP
+          port: {{ .Values.travelContextService.service.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: prometheus
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9090
+    {{- include "triptailor.networkPolicyDnsEgress" . | nindent 4 }}
+{{- if .Values.monitoring.grafana.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-grafana
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: grafana
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $ingressNamespaceLabels | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $ingressPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.monitoring.grafana.service.port }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: prometheus
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9090
+    {{- if .Values.monitoring.tempo.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: tempo
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 3200
+    {{- end }}
+    {{- include "triptailor.networkPolicyDnsEgress" . | nindent 4 }}
+{{- end }}
+{{- if .Values.monitoring.tempo.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "triptailor.fullname" . }}-tempo
+  labels:
+    {{- include "triptailor.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: tempo
+      {{- $selectorLabels | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [backend, genai-service, travel-context-service]
+            matchLabels:
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+    {{- if .Values.monitoring.grafana.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: grafana
+              {{- $selectorLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 3200
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

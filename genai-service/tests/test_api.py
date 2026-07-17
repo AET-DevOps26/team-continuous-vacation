@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from uuid import UUID
 from app.api.routes.schedules import get_schedule_service
 from app.main import app
 from app.services.schedule_service import ScheduleService
@@ -198,21 +199,25 @@ def test_generate_schedule():
 
     # Verify day structure
     first_day = data["days"][0]
-    assert "id" in first_day
-    assert "dayNumber" in first_day
-    assert "date" in first_day
-    assert "activities" in first_day
+    assert set(first_day) == {"id", "dayNumber", "date", "activities"}
+    UUID(first_day["id"])
     assert isinstance(first_day["activities"], list)
 
     # Verify activity structure
     if len(first_day["activities"]) > 0:
         activity = first_day["activities"][0]
-        assert "id" in activity
-        assert "dayId" in activity
-        assert "timeBlock" in activity
-        assert "title" in activity
-        assert "description" in activity
-        assert "durationMinutes" in activity
+        assert set(activity) == {
+            "id",
+            "dayId",
+            "timeBlock",
+            "title",
+            "description",
+            "durationMinutes",
+            "isIndoor",
+            "tags",
+        }
+        UUID(activity["id"])
+        assert activity["dayId"] == first_day["id"]
         assert "ENTERTAINMENT" in activity["tags"]
         assert "SURPRISE_ME" not in activity["tags"]
 
@@ -262,9 +267,113 @@ def test_suggest_alternative_activity():
     assert response.status_code == 200
 
     data = response.json()
-    assert "id" in data
-    assert "dayId" in data
-    assert "timeBlock" in data
-    assert "title" in data
-    assert "description" in data
-    assert "durationMinutes" in data
+    assert set(data) == {
+        "id",
+        "dayId",
+        "timeBlock",
+        "title",
+        "description",
+        "durationMinutes",
+        "isIndoor",
+        "tags",
+    }
+    UUID(data["id"])
+    assert data["dayId"] == request_data["activity"]["dayId"]
+
+
+def test_generation_preferences_accepts_seven_day_trip():
+    from app.models.schemas import GenerationPreferences
+
+    preferences = GenerationPreferences(
+        destination="Munich",
+        startDate="2026-05-15",
+        endDate="2026-05-21",
+        vibe="cultural",
+    )
+
+    assert preferences.startDate.isoformat() == "2026-05-15"
+    assert preferences.endDate.isoformat() == "2026-05-21"
+
+
+def test_generate_schedule_rejects_eight_day_trip():
+    response = client.post(
+        "/schedules",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-05-15",
+            "endDate": "2026-05-22",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_reversed_dates():
+    response = client.post(
+        "/schedules",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-05-18",
+            "endDate": "2026-05-15",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_generate_schedule_rejects_oversized_and_extra_fields():
+    base = {
+        "destination": "M" * 201,
+        "startDate": "2026-05-15",
+        "endDate": "2026-05-18",
+        "vibe": "cultural",
+    }
+    assert client.post("/schedules", json=base).status_code == 422
+
+    base["destination"] = "Munich"
+    base["unexpected"] = True
+    assert client.post("/schedules", json=base).status_code == 422
+
+
+def test_alternative_rejects_activity_outside_parent_day():
+    activity = {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "dayId": "550e8400-e29b-41d4-a716-446655440099",
+        "timeBlock": "MORNING",
+        "title": "Walking tour",
+        "description": "Outdoor walking tour",
+        "durationMinutes": 120,
+        "isIndoor": False,
+        "tags": ["OUTDOOR"],
+    }
+    response = client.post(
+        "/activities/alternative",
+        json={
+            "instruction": "Make this indoor",
+            "activity": activity,
+            "tripContext": {
+                "destination": "Munich",
+                "startDate": "2026-05-15",
+                "endDate": "2026-05-15",
+                "vibe": "cultural",
+                "days": [
+                    {
+                        "id": "550e8400-e29b-41d4-a716-446655440001",
+                        "dayNumber": 1,
+                        "date": "2026-05-15",
+                        "activities": [activity],
+                    }
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_internal_api_does_not_emit_cors_headers():
+    response = client.get("/health", headers={"Origin": "https://evil.example"})
+
+    assert "access-control-allow-origin" not in response.headers

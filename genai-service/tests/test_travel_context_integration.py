@@ -108,7 +108,6 @@ class FakeTravelContextClient:
             destination=preferences.destination,
             coordinates=Coordinates(lat=48.137154, lon=11.576124),
             events=events,
-            places=[],
             weather=_sample_weather(),
         )
 
@@ -132,15 +131,12 @@ def test_schedule_prompt_includes_real_events():
                 score=40,
             )
         ],
-        places=[],
     )
 
     prompt = get_schedule_generation_prompt(preferences, travel_context)
 
     assert "Real events available for this destination" in prompt
     assert "Munich Summer Festival" in prompt
-    assert "Ranked real places available for this destination" not in prompt
-    assert "Prefer the ranked real places" not in prompt
 
 
 def test_schedule_prompt_includes_per_block_weather():
@@ -154,7 +150,6 @@ def test_schedule_prompt_includes_per_block_weather():
         destination="Munich",
         coordinates=Coordinates(lat=48.137154, lon=11.576124),
         events=[],
-        places=[],
         weather=_sample_weather(),
     )
 

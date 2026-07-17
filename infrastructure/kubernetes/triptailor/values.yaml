@@ -12,6 +12,16 @@ tracing:
   otlpEndpoint: http://tempo:4318/v1/traces
   samplingProbability: "1.0"
 
+networkPolicy:
+  enabled: true
+  # Labels used by the ingress controller pods that forward public traffic to
+  # this release. Override these when the cluster uses a different controller.
+  ingressController:
+    namespaceLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+    podLabels:
+      app.kubernetes.io/name: ingress-nginx
+
 postgres:
   enabled: true
   image:
@@ -75,17 +85,13 @@ travelContextService:
   config:
     NOMINATIM_BASE_URL: https://nominatim.openstreetmap.org
     PHOTON_BASE_URL: https://photon.komoot.io
-    OVERPASS_BASE_URL: https://overpass-api.de/api/interpreter
     SERPAPI_BASE_URL: https://serpapi.com/search
     OPEN_METEO_FORECAST_BASE_URL: https://api.open-meteo.com/v1/forecast
     OPEN_METEO_ARCHIVE_BASE_URL: https://archive-api.open-meteo.com/v1/archive
     WEATHER_ENABLED: "true"
     WEATHER_FORECAST_MAX_DAYS: "15"
     HTTP_USER_AGENT: "TripTailor/1.0 (https://github.com/AET-DevOps26/team-continuous-vacation)"
-    PLACE_SEARCH_RADIUS_METERS: "8000"
-    PLACE_SEARCH_LIMIT: "40"
     EVENT_SEARCH_LIMIT: "10"
-    OVERPASS_TIMEOUT_SECONDS: "12"
     CACHE_TTL_SECONDS: "21600"
   secrets:
     SERPAPI_API_KEY: ""
@@ -209,6 +215,7 @@ ingress:
     annotations:
       nginx.ingress.kubernetes.io/use-regex: "true"
       nginx.ingress.kubernetes.io/rewrite-target: /$2
+      nginx.ingress.kubernetes.io/proxy-body-size: 64k
   # Expose Grafana/Prometheus under subpaths on the same host. Requires
   # monitoring.enabled (and grafana.enabled) so the backing service exists.
   # The monitoring pods are reconfigured to serve from these prefixes.

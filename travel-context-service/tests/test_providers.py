@@ -4,11 +4,15 @@ import httpx
 import pytest
 
 from app.models.schemas import Coordinates
-from app.services.providers.nominatim_provider import NominatimProvider
-from app.services.providers.open_meteo_provider import OpenMeteoWeatherProvider
-from app.services.providers.overpass_provider import OverpassProvider, build_overpass_query
+from app.services.providers.nominatim_provider import GeocodingError, NominatimProvider
+from app.services.providers.open_meteo_provider import (
+    OpenMeteoWeatherProvider,
+    _bucket_hourly,
+    _historical_reference,
+    _wmo,
+)
 from app.services.providers.photon_provider import PhotonProvider
-from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
+from app.services.providers.serpapi_events_provider import SerpApiEventsProvider, _map_event
 
 
 @pytest.mark.asyncio
@@ -61,58 +65,19 @@ async def test_nominatim_rate_limit_error_propagates(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_overpass_maps_nodes_ways_and_relations(monkeypatch):
-    async def fake_post(self, url, content=None, headers=None):
+async def test_nominatim_rejects_invalid_json(monkeypatch):
+    async def fake_get(self, url, params=None, headers=None):
         return httpx.Response(
             200,
-            json={
-                "elements": [
-                    {
-                        "type": "node",
-                        "id": 1,
-                        "lat": 48.1,
-                        "lon": 11.5,
-                        "tags": {"name": "Marienplatz", "place": "square"},
-                    },
-                    {
-                        "type": "way",
-                        "id": 2,
-                        "center": {"lat": 48.2, "lon": 11.6},
-                        "tags": {"name": "Englischer Garten", "leisure": "park"},
-                    },
-                    {
-                        "type": "relation",
-                        "id": 3,
-                        "center": {"lat": 48.3, "lon": 11.7},
-                        "tags": {"name": "Tierpark Hellabrunn", "tourism": "zoo"},
-                    },
-                ]
-            },
-            request=httpx.Request("POST", url),
+            text="not-json",
+            request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
-    provider = OverpassProvider("https://overpass.example", "test-agent")
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    provider = NominatimProvider("https://nominatim.example", "test-agent")
 
-    places = await provider.search_places(48.13, 11.57, 12000)
-
-    assert [place.name for place in places] == [
-        "Marienplatz",
-        "Englischer Garten",
-        "Tierpark Hellabrunn",
-    ]
-    assert places[1].latitude == 48.2
-    assert places[2].longitude == 11.7
-
-
-def test_overpass_query_uses_radius_and_expected_tags():
-    query = build_overpass_query(48.137154, 11.576124, 12000)
-
-    assert "[out:json][timeout:12];" in query
-    assert "around:12000,48.137154,11.576124" in query
-    assert '"place"="square"' in query
-    assert '"tourism"~"attraction|museum|gallery|viewpoint|zoo|artwork|theme_park"' in query
-    assert '"waterway"~"river|stream"' in query
+    with pytest.raises(ValueError):
+        await provider.geocode("Munich")
 
 
 @pytest.mark.asyncio
@@ -142,6 +107,22 @@ async def test_photon_response_maps_to_coordinates(monkeypatch):
     assert location.countryCode == "de"
     assert location.coordinates.lat == 48.137154
     assert location.coordinates.lon == 11.576124
+
+
+@pytest.mark.asyncio
+async def test_photon_rejects_missing_coordinates(monkeypatch):
+    async def fake_get(self, url, params=None, headers=None):
+        return httpx.Response(
+            200,
+            json={"features": [{"geometry": {}, "properties": {"name": "X"}}]},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    provider = PhotonProvider("https://photon.example", "test-agent")
+
+    with pytest.raises(GeocodingError, match="did not include coordinates"):
+        await provider.geocode("X")
 
 
 @pytest.mark.asyncio
@@ -227,6 +208,28 @@ async def test_serpapi_events_timeout_propagates(monkeypatch):
 
     with pytest.raises(httpx.TimeoutException, match="serpapi timed out"):
         await provider.search_events("Munich", "de")
+
+
+def test_serpapi_rejects_non_http_links():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="URL must use http or https"):
+        _map_event(
+            {
+                "title": "Unsafe event",
+                "link": "javascript:alert(1)",
+                "date": {"when": "Tomorrow"},
+            }
+        )
+
+
+def test_coordinates_reject_out_of_range_values():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Coordinates(lat=91, lon=11)
+    with pytest.raises(ValidationError):
+        Coordinates(lat=48, lon=-181)
 
 
 def _hourly_payload(start: date, end: date, include_probability: bool) -> dict:
@@ -419,3 +422,28 @@ def test_prior_year_clamps_leap_day():
 
     assert _prior_year(date(2028, 2, 29)) == date(2027, 2, 28)
     assert _prior_year(date(2026, 7, 1)) == date(2025, 7, 1)
+
+
+def test_historical_reference_uses_actual_past_date_and_safe_future_year():
+    today = date(2026, 6, 1)
+
+    assert _historical_reference(date(2025, 5, 1), today) == date(2025, 5, 1)
+    assert _historical_reference(date(2028, 7, 1), today) == date(2025, 7, 1)
+
+
+def test_weather_parser_handles_unknown_codes_and_mismatched_arrays():
+    assert _wmo(999) == ("Unknown", 0)
+
+    buckets = _bucket_hourly(
+        {
+            "time": ["2026-06-01T08:00", "2026-06-01T09:00"],
+            "temperature_2m": [12.0],
+            "precipitation": [],
+            "weather_code": [999, 0],
+        }
+    )
+
+    records = buckets[date(2026, 6, 1)]
+    assert records[0]["temperature"] == 12.0
+    assert records[1]["temperature"] is None
+    assert records[0]["precipitation"] == 0.0

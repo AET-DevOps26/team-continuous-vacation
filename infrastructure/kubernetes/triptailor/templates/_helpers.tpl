@@ -67,3 +67,28 @@ capabilities:
   drop:
     - ALL
 {{- end }}
+
+{{/* DNS egress required by workloads that resolve Kubernetes Services or public APIs. */}}
+{{- define "triptailor.networkPolicyDnsEgress" -}}
+- to:
+    - namespaceSelector: {}
+  ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+{{- end }}
+
+{{/* OTLP/HTTP egress, rendered only when Tempo tracing is enabled. */}}
+{{- define "triptailor.networkPolicyTempoEgress" -}}
+{{- if and .Values.tracing.enabled .Values.monitoring.enabled .Values.monitoring.tempo.enabled }}
+- to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: tempo
+          {{- include "triptailor.selectorLabels" . | nindent 10 }}
+  ports:
+    - protocol: TCP
+      port: 4318
+{{- end }}
+{{- end }}

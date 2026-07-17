@@ -1,64 +1,37 @@
-# CI-only override, layered on top of docker-compose.yml:
-#
-#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up --wait
-#
-# Points every third-party HTTP dependency at one WireMock container so the integration
-# tests run without API keys or internet access. Only APIs we do not own are faked -- the
-# backend, genai-service, travel-context-service and Postgres all stay real, which is the
-# whole point: the traffic between our own services is what is under test.
-#
-# Every base URL below is already a plain setting in the services' config, so nothing here
-# requires production code to know it is running under test.
-# YAML anchors do not cross compose files, so the baseline hardening from docker-compose.yml's
-# x-hardening cannot be reused here and is repeated instead.
 services:
-  mock-externals:
-    security_opt:
-      - "no-new-privileges:true"
-    cap_drop:
-      - ALL
-    image: wiremock/wiremock:3.9.1
-    container_name: triptailor-mock-externals
-    # --verbose makes WireMock log unmatched requests with the closest stub and its diff,
-    # which is the only practical way to debug a stub mismatch from CI logs.
-    command: ["--global-response-templating", "--verbose", "--disable-banner"]
+  mock-providers:
+    build:
+      context: ./tests/mock-providers
     expose:
       - "8080"
-    volumes:
-      - ./integration-tests/wiremock:/home/wiremock:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/__admin/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-
-  genai-service:
-    environment:
-      # The `local` provider is a hand-rolled httpx POST to {base}/chat/completions, so it
-      # talks to any OpenAI-shaped endpoint. `azure` would go through the real SDK.
-      - LLM_PROVIDER=local
-      - LOCAL_LLM_BASE_URL=http://mock-externals:8080/v1
-      # Ignored by WireMock, but the setting has no default and the service will not boot without it.
-      - LOCAL_LLM_API_KEY=ci-dummy
-      - TRAVEL_CONTEXT_ENABLED=true
-    depends_on:
-      mock-externals:
-        condition: service_healthy
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
 
   travel-context-service:
     environment:
-      - NOMINATIM_BASE_URL=http://mock-externals:8080/nominatim
-      # PHOTON_BASE_URL needs no stub: it is only reached as a fallback when Nominatim raises.
-      - SERPAPI_BASE_URL=http://mock-externals:8080/serpapi/search
-      # Must be non-empty. On an empty key the events provider returns [] before issuing any
-      # HTTP call, which would silently skip the events path these tests are meant to cover.
-      - SERPAPI_API_KEY=ci-dummy
-      - OPEN_METEO_FORECAST_BASE_URL=http://mock-externals:8080/open-meteo/forecast
-      - OPEN_METEO_ARCHIVE_BASE_URL=http://mock-externals:8080/open-meteo/archive
-      # OVERPASS_BASE_URL is deliberately absent: OverpassProvider is constructed but never
-      # called (build_trip_context hardcodes places=[]), so it issues no requests.
-      - WEATHER_ENABLED=true
+      NOMINATIM_BASE_URL: http://mock-providers:8080/nominatim
+      PHOTON_BASE_URL: http://mock-providers:8080/photon
+      SERPAPI_BASE_URL: http://mock-providers:8080/events
+      SERPAPI_API_KEY: ci-mock-key
+      OPEN_METEO_FORECAST_BASE_URL: http://mock-providers:8080/weather
+      OPEN_METEO_ARCHIVE_BASE_URL: http://mock-providers:8080/weather
     depends_on:
-      mock-externals:
+      mock-providers:
+        condition: service_healthy
+
+  genai-service:
+    ports:
+      - "8000:8000"
+    environment:
+      LLM_PROVIDER: local
+      LOCAL_LLM_API_KEY: ci-mock-key
+      LOCAL_LLM_BASE_URL: http://mock-providers:8080/v1
+      MODEL_NAME: mock-model
+    depends_on:
+      mock-providers:
+        condition: service_healthy
+      travel-context-service:
         condition: service_healthy

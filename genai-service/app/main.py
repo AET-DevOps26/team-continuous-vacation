@@ -1,7 +1,8 @@
 import logging
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api.routes import schedules
@@ -13,22 +14,21 @@ logging.basicConfig(
     format="%(levelname)s:%(name)s:trace_id=%(otelTraceID)s span_id=%(otelSpanID)s:%(message)s",
 )
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    await schedules.close_schedule_service()
+
+
 app = FastAPI(
     title="TripTailor — GenAI API",
     description="Internal AI generation engine. Consumed only by the App API. Not exposed to the frontend.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 configure_observability(app, "genai-service")
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Include routers
 app.include_router(schedules.router)
@@ -39,12 +39,22 @@ Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     """Health check endpoint"""
     return {"status": "healthy", "service": "genai-service"}
 
 
+@app.get("/ready")
+async def readiness_check() -> dict[str, str]:
+    """Configuration readiness without depending on external provider uptime."""
+    return {
+        "status": "ready",
+        "service": "genai-service",
+        "provider": settings.LLM_PROVIDER,
+    }
+
+
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     """Root endpoint"""
     return {"service": "GenAI Service", "version": "1.0.0", "status": "running"}

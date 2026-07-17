@@ -1,6 +1,6 @@
 # Travel Context Service
 
-FastAPI enrichment service that supplies real-world context to itinerary generation. It combines geocoding, event lookup, weather lookup, ranking helpers, and short-lived in-memory caches.
+FastAPI enrichment service that supplies real-world context to itinerary generation. It combines geocoding, event lookup, weather lookup, and short-lived in-memory caches.
 
 ## Responsibilities
 

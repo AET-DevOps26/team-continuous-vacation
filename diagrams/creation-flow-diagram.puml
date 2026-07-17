@@ -5,12 +5,33 @@ actor User
 participant Frontend
 participant "Backend API\n(Spring Boot)" as API
 participant "GenAI Service\n(Python)" as AI
-database DB
+participant "Travel Context\n(Python)" as Context
+database "PostgreSQL\n(owned by Backend)" as DB
+cloud "Geocoder\nNominatim / Photon" as Geo
+cloud "Events / Weather\nSerpApi / Open-Meteo" as Providers
+cloud "Configured LLM" as LLM
 
 User -> Frontend : Enter trip details
 Frontend -> API : POST /trips
 API -> AI : POST /schedules
-AI -> AI : Call LLM
+AI -> Context : POST /trip-context
+Context -> Context : Check per-replica TTL caches
+Context -> Geo : Geocode destination
+note right of Geo
+  Nominatim is primary.
+  Photon is the fallback.
+end note
+Geo --> Context : Coordinates + country metadata
+Context -> Providers : Fetch optional events + weather
+Providers --> Context : Provider responses
+Context --> AI : Best-effort trip context
+note right of AI
+  If travel context fails, generation
+  continues without enrichment.
+end note
+AI -> LLM : OpenAI-compatible structured request
+LLM --> AI : Schedule JSON
+AI -> AI : Validate schema, exact dates,\n3-5 activities/day and unique blocks
 AI --> API : Return validated schedule
 API -> DB : Insert trip, days, activities
 DB --> API : Saved trip

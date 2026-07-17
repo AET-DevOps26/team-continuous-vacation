@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 
+import httpx
+
 from app.config.settings import settings
 from app.models.schemas import (
     EventCandidate,
@@ -14,23 +16,22 @@ from app.models.schemas import (
 from app.services.cache import TtlCache
 from app.services.providers.nominatim_provider import NominatimProvider
 from app.services.providers.open_meteo_provider import OpenMeteoWeatherProvider
-from app.services.providers.overpass_provider import OverpassProvider
 from app.services.providers.photon_provider import PhotonProvider
 from app.services.providers.serpapi_events_provider import SerpApiEventsProvider
-from app.services.ranking import PlaceRanker
 from app.observability import get_tracer
 from app.metrics import (
     CACHE_REQUESTS_TOTAL,
     EVENTS_RETURNED,
     PROVIDER_DURATION_SECONDS,
+    PROVIDER_FAILURES_TOTAL,
     PROVIDER_REQUESTS_TOTAL,
     WEATHER_DAYS_RETURNED,
+    provider_failure_reason,
 )
 
 logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
 
-COUNTRY_CODE_FALLBACK = "us"
 GERMANY_ALIASES = {"de", "deu", "germany", "deutschland"}
 
 
@@ -39,34 +40,57 @@ class TravelContextService:
         self,
         geocoder: NominatimProvider | None = None,
         fallback_geocoder: PhotonProvider | None = None,
-        place_provider: OverpassProvider | None = None,
         events_provider: SerpApiEventsProvider | None = None,
         weather_provider: OpenMeteoWeatherProvider | None = None,
         geocode_cache: TtlCache[GeocodedLocation] | None = None,
         events_cache: TtlCache[list[EventCandidate]] | None = None,
         weather_cache: TtlCache[list[WeatherDaily]] | None = None,
     ):
+        needs_http_client = any(
+            provider is None
+            for provider in (
+                geocoder,
+                fallback_geocoder,
+                events_provider,
+                weather_provider,
+            )
+        )
+        self.http_client = (
+            httpx.AsyncClient(
+                timeout=httpx.Timeout(15.0, connect=5.0),
+                limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+            )
+            if needs_http_client
+            else None
+        )
         self.geocoder = geocoder or NominatimProvider(
-            settings.NOMINATIM_BASE_URL, settings.HTTP_USER_AGENT
+            settings.NOMINATIM_BASE_URL,
+            settings.HTTP_USER_AGENT,
+            client=self.http_client,
         )
         self.fallback_geocoder = fallback_geocoder or PhotonProvider(
-            settings.PHOTON_BASE_URL, settings.HTTP_USER_AGENT
-        )
-        self.place_provider = place_provider or OverpassProvider(
-            settings.OVERPASS_BASE_URL, settings.HTTP_USER_AGENT
+            settings.PHOTON_BASE_URL,
+            settings.HTTP_USER_AGENT,
+            client=self.http_client,
         )
         self.events_provider = events_provider or SerpApiEventsProvider(
-            settings.SERPAPI_BASE_URL, settings.SERPAPI_API_KEY
+            settings.SERPAPI_BASE_URL,
+            settings.SERPAPI_API_KEY,
+            client=self.http_client,
         )
         self.weather_provider = weather_provider or OpenMeteoWeatherProvider(
             settings.OPEN_METEO_FORECAST_BASE_URL,
             settings.OPEN_METEO_ARCHIVE_BASE_URL,
             settings.WEATHER_FORECAST_MAX_DAYS,
+            client=self.http_client,
         )
         self.geocode_cache = geocode_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.events_cache = events_cache or TtlCache(settings.CACHE_TTL_SECONDS)
         self.weather_cache = weather_cache or TtlCache(settings.CACHE_TTL_SECONDS)
-        self.ranker = PlaceRanker()
+
+    async def aclose(self) -> None:
+        if self.http_client is not None:
+            await self.http_client.aclose()
 
     async def build_trip_context(
         self, request: TripContextRequest
@@ -121,7 +145,6 @@ class TravelContextService:
             destination=request.destination,
             coordinates=location.coordinates,
             events=events,
-            places=[],
             weather=weather,
         )
 
@@ -156,6 +179,9 @@ class TravelContextService:
             ).inc()
         except Exception as error:
             PROVIDER_REQUESTS_TOTAL.labels(provider="nominatim", outcome="error").inc()
+            PROVIDER_FAILURES_TOTAL.labels(
+                provider="nominatim", reason=provider_failure_reason(error)
+            ).inc()
             logger.warning(
                 "Nominatim geocoding failed destination=%s error=%s; trying Photon fallback",
                 destination,
@@ -167,8 +193,11 @@ class TravelContextService:
                 PROVIDER_REQUESTS_TOTAL.labels(
                     provider="photon", outcome="success"
                 ).inc()
-            except Exception:
+            except Exception as error:
                 PROVIDER_REQUESTS_TOTAL.labels(provider="photon", outcome="error").inc()
+                PROVIDER_FAILURES_TOTAL.labels(
+                    provider="photon", reason=provider_failure_reason(error)
+                ).inc()
                 raise
         logger.info(
             "Geocoded destination=%s name=%s display_name=%r country_code=%s lat=%s lon=%s",
@@ -232,11 +261,20 @@ class TravelContextService:
             PROVIDER_REQUESTS_TOTAL.labels(
                 provider="serpapi_events", outcome="success"
             ).inc()
-        except Exception:
+        except Exception as error:
             PROVIDER_REQUESTS_TOTAL.labels(
                 provider="serpapi_events", outcome="error"
             ).inc()
-            raise
+            PROVIDER_FAILURES_TOTAL.labels(
+                provider="serpapi_events", reason=provider_failure_reason(error)
+            ).inc()
+            logger.warning(
+                "Event lookup failed location=%s country_code=%s error_type=%s",
+                location_name,
+                country_code,
+                type(error).__name__,
+            )
+            return []
         limited_events = events[: settings.EVENT_SEARCH_LIMIT]
         self.events_cache.set(cache_key, limited_events)
         return limited_events
@@ -292,6 +330,9 @@ class TravelContextService:
             ).inc()
         except Exception as error:
             PROVIDER_REQUESTS_TOTAL.labels(provider="open_meteo", outcome="error").inc()
+            PROVIDER_FAILURES_TOTAL.labels(
+                provider="open_meteo", reason=provider_failure_reason(error)
+            ).inc()
             # Weather is a best-effort enhancement; never fail the whole context.
             logger.warning(
                 "Weather lookup failed lat=%s lon=%s start=%s end=%s error=%s",
@@ -316,13 +357,13 @@ class TravelContextService:
         return weather
 
 
-def _google_country_code(country_code: str | None) -> str:
+def _google_country_code(country_code: str | None) -> str | None:
     normalized = (country_code or "").lower().strip()
     if normalized in GERMANY_ALIASES:
         return "de"
     if len(normalized) == 2:
         return normalized
-    return COUNTRY_CODE_FALLBACK
+    return None
 
 
 def _date_filter(start_date: date, end_date: date) -> str | None:

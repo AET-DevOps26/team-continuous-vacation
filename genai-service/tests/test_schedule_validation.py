@@ -1,7 +1,9 @@
 from datetime import date
+import copy
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 
 from app.models.schemas import (
     Activity,
@@ -9,10 +11,12 @@ from app.models.schemas import (
     AlternativeActivityRequest,
     Day,
     GenerationPreferences,
+    GeneratedSchedule,
     TimeBlock,
     TripContext,
 )
 from app.services.context_relevance import ContextDecision
+from app.services.llm.base import LLMProviderError
 from app.services.schedule_service import ScheduleGenerationError, ScheduleService
 
 
@@ -26,7 +30,7 @@ class StaticLLMProvider:
 
 class FailingLLMProvider:
     async def generate(self, prompt, options):
-        raise RuntimeError("rate limit")
+        raise LLMProviderError("rate limit")
 
 
 class NullTravelContextClient:
@@ -46,6 +50,123 @@ def preferences():
         endDate=date(2026, 7, 1),
         vibe="cultural",
     )
+
+
+def valid_schedule_payload():
+    return {
+        "days": [
+            {
+                "dayNumber": 1,
+                "date": "2026-07-01",
+                "activities": [
+                    {
+                        "timeBlock": "MORNING",
+                        "title": "Morning museum",
+                        "description": "Visit a museum.",
+                        "durationMinutes": 90,
+                        "isIndoor": True,
+                        "tags": ["CULTURAL"],
+                    },
+                    {
+                        "timeBlock": "AFTERNOON",
+                        "title": "Afternoon park",
+                        "description": "Walk through a park.",
+                        "durationMinutes": 90,
+                        "isIndoor": False,
+                        "tags": ["OUTDOOR"],
+                    },
+                    {
+                        "timeBlock": "EVENING",
+                        "title": "Evening dinner",
+                        "description": "Eat local food.",
+                        "durationMinutes": 90,
+                        "isIndoor": True,
+                        "tags": ["FOOD"],
+                    },
+                ],
+            }
+        ]
+    }
+
+
+def validate_payload(payload):
+    service = ScheduleService(
+        llm_provider=StaticLLMProvider("{}"),
+        travel_context_client=NullTravelContextClient(),
+        context_relevance_classifier=AlwaysFetchContextClassifier(),
+    )
+    service._validate_schedule_contract(
+        GeneratedSchedule.model_validate(payload), preferences()
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda payload: payload["days"].append(
+                copy.deepcopy(payload["days"][0])
+            ),
+            "exactly one day",
+        ),
+        (lambda payload: payload["days"][0].update(dayNumber=2), "sequential"),
+        (lambda payload: payload["days"][0].update(date="2026-07-02"), "dates"),
+        (
+            lambda payload: payload["days"][0].update(
+                activities=payload["days"][0]["activities"][:2]
+            ),
+            "3 to 5",
+        ),
+        (
+            lambda payload: payload["days"][0]["activities"][1].update(
+                timeBlock="MORNING"
+            ),
+            "time block",
+        ),
+        (
+            lambda payload: payload["days"][0]["activities"][1].update(
+                title="  MORNING MUSEUM "
+            ),
+            "unique",
+        ),
+    ],
+)
+def test_schedule_contract_rejects_invariant_violations(mutation, message):
+    payload = copy.deepcopy(valid_schedule_payload())
+    mutation(payload)
+
+    with pytest.raises(ValueError, match=message):
+        validate_payload(payload)
+
+
+def test_generated_schedule_rejects_extra_fields():
+    payload = valid_schedule_payload()
+    payload["unexpected"] = True
+
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        GeneratedSchedule.model_validate(payload)
+
+
+def test_json_cleanup_and_tag_sanitizing_are_bounded():
+    service = ScheduleService(
+        llm_provider=StaticLLMProvider("{}"),
+        travel_context_client=NullTravelContextClient(),
+        context_relevance_classifier=AlwaysFetchContextClassifier(),
+    )
+
+    assert service._load_json("```json\n{\"days\": []}\n```", "schedule") == {
+        "days": []
+    }
+    with pytest.raises(ValueError, match="empty"):
+        service._load_json("   ", "schedule")
+
+    activity = {"tags": [" cultural ", "CULTURAL", "not-supported", 42]}
+    service._sanitize_activity_tags(activity, "test")
+    assert activity["tags"] == ["CULTURAL"]
+
+    non_list = {"tags": "CULTURAL"}
+    service._sanitize_activity_tags(non_list, "test")
+    assert non_list["tags"] == []
 
 
 @pytest.mark.asyncio

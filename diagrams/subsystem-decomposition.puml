@@ -47,7 +47,7 @@ rectangle "TripTailor System" {
 }
 
 cloud "Configured LLM\nAzure OpenAI or local endpoint" as LLM
-cloud "Travel Data Providers\nNominatim / Photon (geocoding)\nOverpass API (places)\nSerpApi (events)\nOpen-Meteo (weather)" as Providers
+cloud "Travel Data Providers\nNominatim / Photon (geocoding)\nSerpApi (events)\nOpen-Meteo (weather)" as Providers
 
 Traveler --> Gateway : HTTPS
 Gateway --> Frontend : /*\nstatic application
@@ -56,7 +56,7 @@ Gateway --> Backend : /api/*\nJSON/HTTPS
 Backend --> GenAI : Schedule/alternative REST
 Backend --> Database : Traveler/trip JDBC/SQL
 GenAI --> LLM : OpenAI-compatible API\nstructured generation
-GenAI --> Context : POST /context
+GenAI --> Context : POST /trip-context
 Context --> Providers : Provider-specific HTTPS APIs
 
 Prometheus ..> Backend

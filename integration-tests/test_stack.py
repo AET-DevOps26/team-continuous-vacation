@@ -1,21 +1,23 @@
 """End-to-end flow across backend -> genai-service -> travel-context-service -> Postgres.
 
-Only third-party APIs are faked (see wiremock/mappings). Every service boundary in the request
+Only third-party APIs are faked (see tests/mock-providers). Every service boundary in the request
 path is real, so a contract drift between two of our services fails these tests -- which is
 exactly what the per-service suites cannot catch, because they stub that boundary out.
 
-The expected titles below are the ones served by wiremock/mappings/llm-schedule.json. Asserting
-on them proves the stub's payload actually travelled genai -> backend -> Postgres -> client
-rather than something being generated or defaulted along the way.
+The expected titles below are the ones served by tests/mock-providers/server.py. Asserting on
+them proves the stub's payload actually travelled genai -> backend -> Postgres -> client rather
+than something being generated or defaulted along the way.
 """
 
 import pytest
 
 from conftest import TRIP_DESTINATION, TRIP_END, TRIP_START, TRIP_VIBE
 
-STUB_DAY_ONE_TITLES = {"Stub Museum Visit", "Stub Park Walk", "Stub Dinner"}
-STUB_DAY_TWO_TITLES = {"Stub Market Tour", "Stub Gallery Stop", "Stub Concert"}
-STUB_ALTERNATIVE_TITLE = "Stub Replacement Activity"
+# server.py suffixes each title with the day's date to keep them unique across the schedule,
+# which _validate_schedule_contract requires.
+STUB_DAY_ONE_TITLES = {f"{name} {TRIP_START}" for name in ("Museum", "City Walk", "Dinner")}
+STUB_DAY_TWO_TITLES = {f"{name} {TRIP_END}" for name in ("Museum", "City Walk", "Dinner")}
+STUB_ALTERNATIVE_TITLE = "Mock Replacement Activity"
 
 
 @pytest.fixture(scope="session")

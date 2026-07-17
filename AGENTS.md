@@ -4,7 +4,7 @@
 
 - `backend/`: Kotlin Spring Boot backend-for-frontend. Application code lives in `src/main/kotlin/com/vacation/app`, resources in `src/main/resources`, and tests in `src/test/kotlin`. Owns auth, JWT validation, trip orchestration, and database access (travelers, trips, days, activities, tags) via Spring JDBC.
 - `genai-service/`: Python FastAPI service that prompts the configured LLM and validates structured itinerary output. App code in `app/`, tests in `tests/`.
-- `travel-context-service/`: Python FastAPI enrichment service for geocoding, events, places, weather, and ranking. App code in `app/`, tests in `tests/`.
+- `travel-context-service/`: Python FastAPI enrichment service for geocoding, events, and weather. App code in `app/`, tests in `tests/`.
 - `frontend/`: React 19 + Vite + Refine app. Pages are in `src/pages`, reusable UI in `src/components`, providers in `src/providers`, and helpers in `src/lib`.
 - `api-specification/`: OpenAPI YAML files for frontend, GenAI, and travel-context boundaries.
 - `diagrams/`: PlantUML architecture and flow diagrams.
