@@ -64,7 +64,7 @@ def main() -> None:
     )
     run(
         "genai",
-        f"{args.genai_url}/schedules/generate",
+        f"{args.genai_url}/schedules",
         payload,
         args.requests,
         args.concurrency,

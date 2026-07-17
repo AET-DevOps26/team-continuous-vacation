@@ -60,7 +60,7 @@ if docker compose ps --services | grep -qx "mock-providers"; then
 
 	schedule_response="$(docker compose exec -T gateway wget -qO- \
 		--header='Content-Type: application/json' --post-data="${trip_payload}" \
-		http://genai-service:8000/schedules/generate)"
+		http://genai-service:8000/schedules)"
 	python3 -c 'import json,sys; value=json.load(sys.stdin); assert len(value["days"]) == 2' \
 		<<<"${schedule_response}"
 	echo "Mocked GenAI -> travel-context -> provider flow generated a two-day schedule"
@@ -70,7 +70,7 @@ elif [[ "${REAL_PROVIDER_SMOKE:-false}" == "true" ]]; then
 	trip_payload="{\"destination\":\"Munich\",\"startDate\":\"${start_date}\",\"endDate\":\"${end_date}\",\"vibe\":\"cultural\"}"
 	schedule_response="$(docker compose exec -T gateway wget -qO- \
 		--header='Content-Type: application/json' --post-data="${trip_payload}" \
-		http://genai-service:8000/schedules/generate)"
+		http://genai-service:8000/schedules)"
 	python3 -c 'import json,sys; value=json.load(sys.stdin); assert len(value["days"]) == 2' \
 		<<<"${schedule_response}"
 	echo "Controlled real-provider/LLM smoke generation succeeded (response not logged)"
