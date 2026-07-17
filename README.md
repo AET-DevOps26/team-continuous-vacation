@@ -35,7 +35,7 @@ Planning a trip is often overwhelming, requiring travelers to juggle multiple we
 **Scenario 1: The Initial Generation (Full System Flow)**
 The user opens the app and enters "Munich, 3 days in mid-May, sporty vibe." The application processes this request through the AI engine and fetches time-frame relevant information (weather, events) on the fly. After a few seconds, the user is presented with a beautifully formatted 3-day schedule, neatly divided into morning, afternoon, and evening blocks with specific activities. This trip is automatically saved to their personal dashboard so they can close the app and return to it later.
 
-**Scenario 2: The Rainy Day Swap (Micro-Regeneration)**
+**Scenario 2: The Activity Swap (Micro-Regeneration)**
 While reviewing their saved trip, the user looks at Day 2, Afternoon: "Walking tour of the English Garden." Realizing that the user has not yet visited any Museum, they click an "Edit" button on that specific activity block and type "Lets switch this to a cultural activity." The AI processes this targeted request and suggests "Visit the Deutsches Museum." The schedule instantly updates that single card on the screen, keeping the morning and evening plans exactly as they were.
 
 ## Local Configuration
