@@ -145,10 +145,16 @@ kotlin {
 	}
 }
 
+// The backend hosts the Swagger UI for every service contract, so all three
+// specs are copied onto the classpath. `frontend.yaml` keeps the `openapi.yaml`
+// name it has always had; the internal contracts keep their source names.
 val copyOpenApiSpec by tasks.registering(Copy::class) {
-	from("${rootProject.projectDir}/../api-specification/frontend.yaml")
+	from("${rootProject.projectDir}/../api-specification/frontend.yaml") {
+		rename { "openapi.yaml" }
+	}
+	from("${rootProject.projectDir}/../api-specification/gen-ai.yaml")
+	from("${rootProject.projectDir}/../api-specification/travel-context.yaml")
 	into(layout.projectDirectory.dir("src/main/resources"))
-	rename { "openapi.yaml" }
 }
 
 tasks.processResources {
