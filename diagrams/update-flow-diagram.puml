@@ -5,7 +5,7 @@ actor User
 participant Frontend
 participant "Backend API\n(Spring Boot)" as API
 participant "GenAI Service\n(Python)" as AI
-database DB
+database "PostgreSQL\n(owned by Backend)" as DB
 
 User -> Frontend : Click "Edit" on activity block
 User -> Frontend : Enter update request\n("Make this indoor")

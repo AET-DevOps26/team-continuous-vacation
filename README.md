@@ -43,7 +43,7 @@ The travel context service uses SerpApi for Google Events. Create `travel-contex
 
 ## Service Map
 
-TripTailor runs as five application services plus Postgres:
+TripTailor runs as four application services plus Postgres:
 
 | Service | Path | Responsibility |
 | --- | --- | --- |
@@ -90,13 +90,49 @@ The relational database schema and persistent storage setup are documented in
 [`docs/database.md`](docs/database.md). The executable schema is
 `backend/src/main/resources/schema.sql`.
 
+### Generation and persistence flow
+
+1. The browser sends `POST /api/trips` to the backend through NGINX.
+2. The backend validates the request and calls GenAI at `POST /schedules`.
+3. GenAI calls travel context at `POST /trip-context`. Nominatim geocodes the
+   destination, with Photon as fallback; the coordinates and country metadata
+   are then used for Open-Meteo weather and optional SerpApi event lookup.
+4. GenAI calls the configured OpenAI-compatible LLM and validates its structured
+   response. Trips may contain at most seven inclusive calendar days.
+5. The backend writes the traveler, trip, days, activities, and tags directly to
+   PostgreSQL using Spring JDBC, then returns the persisted trip to the browser.
+
+Travel context is best effort from GenAI's perspective: a timeout or invalid
+travel-context response is logged and schedule generation continues without
+enrichment. Within travel context, events and weather degrade to empty results;
+geocoding first tries Nominatim and then Photon. The travel-context caches are
+bounded in-memory TTL caches scoped to one service process/pod, not distributed
+across Kubernetes replicas.
+
+### Normal, mocked, and real-provider smoke modes
+
+Application code always performs ordinary HTTP provider calls. The selected
+Compose files decide where those calls go:
+
+| Mode | Command/configuration | Provider behavior |
+| --- | --- | --- |
+| Normal | `docker compose up --build` | Uses provider URLs and LLM settings from the normal environment files. |
+| Deterministic CI | `COMPOSE_FILE=docker-compose.yml:docker-compose.ci.yml docker compose up --build` | Overrides provider base URLs so the same production clients call `mock-providers`. No external provider secrets or costs are required. |
+| Controlled real smoke | `REAL_PROVIDER_SMOKE=true bash scripts/docker-compose-smoke.sh` against the normal stack | Makes one real generation request using locally configured secrets; generated payloads and secrets are not printed. |
+
+In the CI override, `LLM_PROVIDER=local` means an OpenAI-compatible HTTP
+endpoint and points to the mock server. Outside CI it can point to a compatible
+local runtime such as Ollama. The smoke script detects deterministic mode by
+checking whether the merged Compose project contains the `mock-providers`
+service.
+
 ### Subsystems and interfaces
 
 | Caller | Callee | Interface | Responsibility |
 | --- | --- | --- | --- |
 | Browser frontend | Backend API | `/api/*` through NGINX; public OpenAPI contract | Authentication and traveler-facing trip workflows |
 | Backend API | GenAI service | Internal REST; GenAI OpenAPI contract | Schedule generation and contextual activity alternatives |
-| GenAI service | Travel-context service | `POST /context`; travel-context OpenAPI contract | Event and weather context |
+| GenAI service | Travel-context service | `POST /trip-context`; travel-context OpenAPI contract | Geocoding, event, and weather context |
 | Backend API | PostgreSQL | JDBC/SQL | Durable application state (travelers, trips, days, activities) |
 | GenAI service | Configured LLM | OpenAI-compatible HTTPS API | Schema-constrained schedule and activity generation |
 | Travel-context service | External providers | Provider-specific HTTPS APIs | Geocoding, events, and weather |

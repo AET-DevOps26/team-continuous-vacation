@@ -1229,8 +1229,8 @@ The Helm chart uses service names that match Docker Compose:
 
 The Helm chart enables `networkPolicy.enabled` by default. A release-scoped
 default-deny policy is combined with explicit policies for every workload:
-gateway ingress to public services, backend-to-persistence and backend-to-GenAI,
-GenAI-to-travel-context, persistence-to-Postgres, Prometheus scraping, Tempo
+gateway ingress to public services, backend-to-Postgres and backend-to-GenAI,
+GenAI-to-travel-context, Prometheus scraping, Tempo
 tracing, Grafana data sources, DNS, and external HTTPS provider calls.
 
 The defaults expect an ingress-nginx controller in the `ingress-nginx` namespace.

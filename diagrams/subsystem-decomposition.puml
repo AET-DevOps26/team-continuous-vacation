@@ -56,7 +56,7 @@ Gateway --> Backend : /api/*\nJSON/HTTPS
 Backend --> GenAI : Schedule/alternative REST
 Backend --> Database : Traveler/trip JDBC/SQL
 GenAI --> LLM : OpenAI-compatible API\nstructured generation
-GenAI --> Context : POST /context
+GenAI --> Context : POST /trip-context
 Context --> Providers : Provider-specific HTTPS APIs
 
 Prometheus ..> Backend
