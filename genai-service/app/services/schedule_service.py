@@ -5,7 +5,7 @@ Service for AI-powered schedule generation based on OpenAPI specification
 import logging
 import json
 from datetime import timedelta
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
@@ -22,7 +22,7 @@ from app.models.schemas import (
     Schedule,
 )
 from app.config.settings import settings
-from app.services.llm.base import LLMGenerationOptions, LLMProvider
+from app.services.llm.base import LLMGenerationOptions, LLMProvider, LLMProviderError
 from app.services.llm.factory import LLMProviderFactory
 from app.services.prompts.schedule_prompts import (
     get_alternative_activity_prompt,
@@ -113,7 +113,7 @@ class ScheduleService:
         prompt = get_schedule_generation_prompt(preferences, travel_context)
         logger.debug(
             "Starting schedule LLM generation destination=%s startDate=%s endDate=%s "
-            "vibe=%s context_events=%s context_weather_days=%s prompt_length=%s prompt=%s",
+            "vibe=%s context_events=%s context_weather_days=%s prompt_length=%s",
             preferences.destination,
             preferences.startDate,
             preferences.endDate,
@@ -121,19 +121,13 @@ class ScheduleService:
             len(travel_context.events) if travel_context else 0,
             len(travel_context.weather) if travel_context else 0,
             len(prompt),
-            prompt,
         )
         response_text = await self._call_llm(prompt)
-        logger.debug(
-            "Schedule LLM raw response length=%s response=%r",
-            len(response_text or ""),
-            response_text,
-        )
+        logger.debug("Schedule LLM response length=%s", len(response_text or ""))
 
         try:
             parsed_json = self._load_json(response_text, "schedule")
             self._sanitize_schedule_tags(parsed_json)
-            logger.debug("Schedule LLM parsed JSON: %s", parsed_json)
             parsed_schedule = GeneratedSchedule.model_validate(parsed_json)
             self._validate_schedule_contract(parsed_schedule, preferences)
             days = [self._to_day(day_data) for day_data in parsed_schedule.days]
@@ -147,9 +141,8 @@ class ScheduleService:
             return Schedule(days=days)
         except (json.JSONDecodeError, KeyError, ValueError, ValidationError) as error:
             logger.warning(
-                "Failed to parse schedule LLM response: %s raw_response=%r",
+                "Failed to parse schedule LLM response: %s",
                 error,
-                response_text,
             )
             GENERATIONS_TOTAL.labels(kind="schedule", outcome="error").inc()
             raise ScheduleGenerationError(
@@ -171,16 +164,15 @@ class ScheduleService:
         prompt = get_alternative_activity_prompt(request)
         logger.debug(
             "Starting alternative activity LLM generation activity_id=%s title=%r "
-            "instruction=%r prompt_length=%s prompt=%s",
+            "instruction_length=%s prompt_length=%s",
             request.activity.id,
             request.activity.title,
-            request.instruction,
+            len(request.instruction),
             len(prompt),
-            prompt,
         )
         try:
             response_text = await self._call_llm(prompt)
-        except Exception as error:
+        except LLMProviderError as error:
             logger.warning(
                 "Alternative activity LLM call failed; using deterministic fallback: %s",
                 error,
@@ -188,16 +180,11 @@ class ScheduleService:
             GENERATIONS_TOTAL.labels(kind="alternative", outcome="fallback").inc()
             return self._fallback_alternative_activity(request)
 
-        logger.debug(
-            "Alternative activity LLM raw response length=%s response=%r",
-            len(response_text or ""),
-            response_text,
-        )
+        logger.debug("Alternative activity LLM response length=%s", len(response_text or ""))
 
         try:
             parsed_json = self._load_json(response_text, "alternative activity")
             self._sanitize_activity_tags(parsed_json, "alternative activity")
-            logger.debug("Alternative activity LLM parsed JSON: %s", parsed_json)
             activity_data = GeneratedActivity.model_validate(parsed_json)
             self._validate_alternative_contract(activity_data, request)
             activity = self._to_activity(activity_data, request.activity.dayId)
@@ -211,9 +198,8 @@ class ScheduleService:
             return activity
         except (json.JSONDecodeError, KeyError, ValueError, ValidationError) as error:
             logger.warning(
-                "Failed to parse alternative activity LLM response: %s raw_response=%r",
+                "Failed to parse alternative activity LLM response: %s",
                 error,
-                response_text,
             )
             GENERATIONS_TOTAL.labels(kind="alternative", outcome="error").inc()
             raise ScheduleGenerationError(
@@ -250,7 +236,11 @@ class ScheduleService:
                     options=options,
                 )
 
-    def _load_json(self, response_text: str, generation_name: str) -> dict:
+    async def aclose(self) -> None:
+        await self.travel_context_client.aclose()
+        await self.llm_provider.aclose()
+
+    def _load_json(self, response_text: str, generation_name: str) -> dict[str, Any]:
         cleaned = response_text.strip()
         if not cleaned:
             raise ValueError(f"{generation_name} LLM response was empty")
@@ -259,12 +249,14 @@ class ScheduleService:
         elif cleaned.startswith("```"):
             cleaned = cleaned.split("```", 1)[1].split("```", 1)[0].strip()
         logger.debug(
-            "Cleaned %s LLM response for JSON parse length=%s response=%r",
+            "Cleaned %s LLM response for JSON parse length=%s",
             generation_name,
             len(cleaned),
-            cleaned,
         )
-        return json.loads(cleaned)
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{generation_name} response must be a JSON object")
+        return cast(dict[str, Any], parsed)
 
     def _sanitize_schedule_tags(self, schedule_data: dict[str, Any]) -> None:
         days = schedule_data.get("days")
@@ -383,6 +375,8 @@ class ScheduleService:
         original_title = request.activity.title.strip().lower()
         if replacement_title == original_title:
             raise ValueError("Alternative activity must not reuse the replaced title")
+        if activity_data.timeBlock != request.activity.timeBlock:
+            raise ValueError("Alternative activity must keep the original time block")
 
         existing_titles = {
             activity.title.strip().lower()

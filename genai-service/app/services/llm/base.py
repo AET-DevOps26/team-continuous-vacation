@@ -28,3 +28,18 @@ class LLMProvider(ABC):
             The LLM response as a string.
         """
         pass
+
+    async def aclose(self) -> None:
+        """Release provider resources when the application shuts down."""
+
+
+class LLMProviderError(RuntimeError):
+    """Base error for expected LLM provider failures."""
+
+
+class LLMProviderResponseError(LLMProviderError):
+    """The provider returned an unsuccessful or malformed response."""
+
+
+class LLMProviderTimeoutError(LLMProviderError):
+    """The provider did not respond before the configured timeout."""

@@ -7,6 +7,7 @@ from typing import Any, Literal
 import httpx
 
 from app.models.schemas import Coordinates, WeatherBlock, WeatherDaily
+from app.services.http_retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +72,13 @@ class OpenMeteoWeatherProvider:
         forecast_base_url: str,
         archive_base_url: str,
         forecast_max_days: int,
+        client: httpx.AsyncClient | None = None,
     ):
         self.forecast_base_url = forecast_base_url
         self.archive_base_url = archive_base_url
         self.forecast_max_days = forecast_max_days
+        self.client = client or httpx.AsyncClient(timeout=15.0)
+        self._owns_client = client is None
 
     async def get_weather(
         self,
@@ -92,7 +96,7 @@ class OpenMeteoWeatherProvider:
         # Fetch segments independently so one provider-window failure does not
         # discard weather already available from the other endpoint.
         await self._load_forecast(coordinates, forecast_dates, result)
-        await self._load_historical(coordinates, historical_dates, result)
+        await self._load_historical(coordinates, historical_dates, result, today)
         return [result[d] for d in trip_dates if d in result]
 
     async def _load_forecast(
@@ -128,10 +132,13 @@ class OpenMeteoWeatherProvider:
         coordinates: Coordinates,
         historical_dates: list[date],
         result: dict[date, WeatherDaily],
+        today: date,
     ) -> None:
         if not historical_dates:
             return
-        reference_map = {d: _prior_year(d) for d in historical_dates}
+        reference_map = {
+            d: _historical_reference(d, today) for d in historical_dates
+        }
         references = sorted(reference_map.values())
         try:
             by_date = await self._fetch_buckets(
@@ -183,23 +190,28 @@ class OpenMeteoWeatherProvider:
             range_end,
             include_probability,
         )
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(base_url, params=params)
-            logger.info(
-                "Open-Meteo response status=%s response_bytes=%s",
+        response = await request_with_retry(
+            lambda: self.client.get(base_url, params=params)
+        )
+        logger.info(
+            "Open-Meteo response status=%s response_bytes=%s",
+            response.status_code,
+            len(response.content),
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "Open-Meteo error status=%s body=%r",
                 response.status_code,
-                len(response.content),
+                response.text[:1000],
             )
-            if response.status_code >= 400:
-                logger.warning(
-                    "Open-Meteo error status=%s body=%r",
-                    response.status_code,
-                    response.text[:1000],
-                )
-            response.raise_for_status()
-            payload = response.json()
+        response.raise_for_status()
+        payload = response.json()
 
         return _bucket_hourly(payload.get("hourly") or {})
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self.client.aclose()
 
 
 def _inclusive_dates(start_date: date, end_date: date) -> list[date]:
@@ -217,6 +229,20 @@ def _prior_year(value: date) -> date:
     except ValueError:
         # Feb 29 in a non-leap reference year -> clamp to Feb 28.
         return value.replace(year=value.year - 1, day=28)
+
+
+def _historical_reference(value: date, today: date) -> date:
+    """Choose an archive date that is safely in the past.
+
+    Past trip dates use their actual observations. Future dates use the most
+    recent matching calendar date at least five days behind today, avoiding
+    archive requests for dates that have not happened yet.
+    """
+    archive_cutoff = today - timedelta(days=5)
+    reference = value
+    while reference > archive_cutoff:
+        reference = _prior_year(reference)
+    return reference
 
 
 def _bucket_hourly(hourly: dict[str, Any]) -> dict[date, list[dict[str, Any]]]:

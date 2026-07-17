@@ -90,7 +90,6 @@ async def test_travel_context_client_posts_preferences_and_maps_context(monkeypa
                     "score": 42,
                 }
             ],
-            "places": [],
             "weather": [],
         }
     )

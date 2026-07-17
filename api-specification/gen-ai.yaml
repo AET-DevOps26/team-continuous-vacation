@@ -102,6 +102,8 @@ components:
       properties:
         destination:
           type: string
+          minLength: 1
+          maxLength: 200
           example: "Munich"
         startDate:
           type: string
@@ -110,9 +112,12 @@ components:
         endDate:
           type: string
           format: date
+          description: Must be on or after startDate; trips are limited to 7 inclusive days.
           example: "2026-05-18"
         vibe:
           type: string
+          minLength: 1
+          maxLength: 500
           example: "Sporty and active"
 
     AlternativeActivityRequest:
@@ -121,6 +126,8 @@ components:
       properties:
         instruction:
           type: string
+          minLength: 1
+          maxLength: 1000
           description: Free-text directive describing what should change.
           example: "Make this an indoor activity"
         activity:

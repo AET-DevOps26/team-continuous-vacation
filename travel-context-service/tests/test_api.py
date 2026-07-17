@@ -1,6 +1,9 @@
 from fastapi.testclient import TestClient
 
-from app.api.routes.context import get_travel_context_service
+from app.api.routes.context import (
+    close_travel_context_service,
+    get_travel_context_service,
+)
 from app.main import app
 from app.models.schemas import Coordinates, EventCandidate, TripContextResponse
 
@@ -21,7 +24,6 @@ class FakeTravelContextService:
                     score=40,
                 )
             ],
-            places=[],
         )
 
 
@@ -55,7 +57,6 @@ def test_trip_context_endpoint_returns_events():
     assert data["destination"] == "Munich"
     assert data["coordinates"]["lat"] == 48.137154
     assert data["events"][0]["title"] == "Munich Summer Festival"
-    assert data["places"] == []
 
 
 def test_trip_context_endpoint_validates_required_payload():
@@ -84,4 +85,77 @@ def test_trip_context_endpoint_returns_502_on_provider_failure():
     )
 
     assert response.status_code == 502
-    assert "provider rate limit" in response.json()["detail"]
+    assert response.json()["detail"] == "Failed to build travel context"
+
+
+def test_trip_context_endpoint_accepts_seven_day_trip():
+    response = client.post(
+        "/trip-context",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-07",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_trip_context_endpoint_rejects_eight_day_trip():
+    response = client.post(
+        "/trip-context",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-06-01",
+            "endDate": "2026-06-08",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_trip_context_endpoint_rejects_reversed_dates():
+    response = client.post(
+        "/trip-context",
+        json={
+            "destination": "Munich",
+            "startDate": "2026-06-05",
+            "endDate": "2026-06-01",
+            "vibe": "cultural",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_trip_context_rejects_oversized_and_extra_fields():
+    request = {
+        "destination": "M" * 201,
+        "startDate": "2026-06-01",
+        "endDate": "2026-06-05",
+        "vibe": "cultural",
+    }
+    assert client.post("/trip-context", json=request).status_code == 422
+
+    request["destination"] = "Munich"
+    request["unexpected"] = True
+    assert client.post("/trip-context", json=request).status_code == 422
+
+
+def test_internal_api_does_not_emit_cors_headers():
+    response = client.get("/health", headers={"Origin": "https://evil.example"})
+
+    assert "access-control-allow-origin" not in response.headers
+
+
+async def test_default_dependency_reuses_and_closes_service():
+    get_travel_context_service.cache_clear()
+
+    first = get_travel_context_service()
+    second = get_travel_context_service()
+
+    assert first is second
+    await close_travel_context_service()
+    assert get_travel_context_service.cache_info().currsize == 0

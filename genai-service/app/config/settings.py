@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(GENAI_SERVICE_DIR / ".env.example", GENAI_SERVICE_DIR / ".env"),
         case_sensitive=True,
+        extra="ignore",
     )
 
     # GenAI Configuration

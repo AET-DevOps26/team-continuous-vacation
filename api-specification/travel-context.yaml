@@ -2,8 +2,8 @@ openapi: 3.0.3
 info:
   title: TripTailor — Travel Context API
   description: >
-    Internal enrichment service for retrieving and ranking real-world travel
-    context such as places, events, weather, and routing hints.
+    Internal enrichment service for retrieving real-world geocoding, event, and
+    weather context.
   version: 1.0.0
 
 servers:
@@ -64,6 +64,8 @@ components:
       properties:
         destination:
           type: string
+          minLength: 1
+          maxLength: 200
           example: Munich
         startDate:
           type: string
@@ -72,9 +74,12 @@ components:
         endDate:
           type: string
           format: date
+          description: Must be on or after startDate; trips are limited to 7 inclusive days.
           example: "2026-06-05"
         vibe:
           type: string
+          minLength: 1
+          maxLength: 500
           example: cultural and relaxed
         includeEvents:
           type: boolean
@@ -85,17 +90,12 @@ components:
 
     TripContextResponse:
       type: object
-      required: [destination, coordinates, events, places, weather]
+      required: [destination, coordinates, events, weather]
       properties:
         destination:
           type: string
         coordinates:
           $ref: "#/components/schemas/Coordinates"
-        places:
-          type: array
-          description: Legacy place candidates. Empty in the events-first v1 flow.
-          items:
-            $ref: "#/components/schemas/PlaceCandidate"
         events:
           type: array
           items:
@@ -229,48 +229,6 @@ components:
           type: string
           format: uri
           nullable: true
-        score:
-          type: number
-          format: double
-
-    PlaceCandidate:
-      type: object
-      required: [source, sourceId, name, latitude, longitude, osmTags, score]
-      properties:
-        source:
-          type: string
-          example: openstreetmap
-        sourceId:
-          type: string
-          example: relation:62511
-        name:
-          type: string
-          example: Englischer Garten
-        category:
-          type: string
-          nullable: true
-          example: leisure:park
-        latitude:
-          type: number
-          format: double
-        longitude:
-          type: number
-          format: double
-        address:
-          type: string
-          nullable: true
-        website:
-          type: string
-          nullable: true
-        wikipedia:
-          type: string
-          nullable: true
-        openingHours:
-          type: string
-          nullable: true
-        osmTags:
-          type: object
-          additionalProperties: true
         score:
           type: number
           format: double

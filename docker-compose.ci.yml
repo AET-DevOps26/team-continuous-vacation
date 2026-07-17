@@ -1,0 +1,37 @@
+services:
+  mock-providers:
+    build:
+      context: ./tests/mock-providers
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  travel-context-service:
+    environment:
+      NOMINATIM_BASE_URL: http://mock-providers:8080/nominatim
+      PHOTON_BASE_URL: http://mock-providers:8080/photon
+      SERPAPI_BASE_URL: http://mock-providers:8080/events
+      SERPAPI_API_KEY: ci-mock-key
+      OPEN_METEO_FORECAST_BASE_URL: http://mock-providers:8080/weather
+      OPEN_METEO_ARCHIVE_BASE_URL: http://mock-providers:8080/weather
+    depends_on:
+      mock-providers:
+        condition: service_healthy
+
+  genai-service:
+    ports:
+      - "8000:8000"
+    environment:
+      LLM_PROVIDER: local
+      LOCAL_LLM_API_KEY: ci-mock-key
+      LOCAL_LLM_BASE_URL: http://mock-providers:8080/v1
+      MODEL_NAME: mock-model
+    depends_on:
+      mock-providers:
+        condition: service_healthy
+      travel-context-service:
+        condition: service_healthy

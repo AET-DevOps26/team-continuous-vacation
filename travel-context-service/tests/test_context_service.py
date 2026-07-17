@@ -1,3 +1,4 @@
+import pytest
 from prometheus_client import REGISTRY, generate_latest
 
 from app.models.schemas import (
@@ -89,6 +90,11 @@ class EventProvider:
         ]
 
 
+class FailingEventProvider:
+    async def search_events(self, location_name, country_code, date_filter=None):
+        raise RuntimeError("rate limited")
+
+
 async def test_context_service_uses_photon_fallback_when_nominatim_fails():
     fallback_geocoder = FallbackGeocoder()
     service = TravelContextService(
@@ -114,6 +120,18 @@ async def test_context_service_uses_photon_fallback_when_nominatim_fails():
     )
 
 
+async def test_context_service_propagates_double_geocoder_failure():
+    service = TravelContextService(
+        geocoder=FailingGeocoder(),
+        fallback_geocoder=FailingGeocoder(),
+        geocode_cache=TtlCache(60),
+        events_cache=TtlCache(60),
+    )
+
+    with pytest.raises(RuntimeError, match="blocked"):
+        await service._geocode("Unknown destination")
+
+
 async def test_context_service_reuses_geocode_cache():
     geocoder = FallbackGeocoder()
     service = TravelContextService(
@@ -130,7 +148,7 @@ async def test_context_service_reuses_geocode_cache():
     assert geocoder.calls == 1
 
 
-async def test_context_service_returns_events_and_empty_places():
+async def test_context_service_returns_events():
     events_provider = EventProvider()
     service = TravelContextService(
         geocoder=FallbackGeocoder(),
@@ -153,7 +171,6 @@ async def test_context_service_returns_events_and_empty_places():
 
     assert response.coordinates.lat == 48.137154
     assert response.events[0].title == "Munich Summer Festival"
-    assert response.places == []
     assert events_provider.calls[0]["location_name"] == "Munich"
     assert events_provider.calls[0]["country_code"] == "de"
     metrics = generate_latest(REGISTRY).decode("utf-8")
@@ -258,3 +275,27 @@ async def test_context_service_weather_is_best_effort_on_failure():
 
     assert response.weather == []
     assert response.events[0].title == "Munich Summer Festival"
+
+
+async def test_context_service_events_are_best_effort_on_failure():
+    service = TravelContextService(
+        geocoder=FallbackGeocoder(),
+        fallback_geocoder=FallbackGeocoder(),
+        events_provider=FailingEventProvider(),
+        weather_provider=FakeWeatherProvider(),
+        geocode_cache=TtlCache(60),
+        events_cache=TtlCache(60),
+        weather_cache=TtlCache(60),
+    )
+
+    response = await service.build_trip_context(
+        TripContextRequest(
+            destination="Munich",
+            startDate="2026-06-01",
+            endDate="2026-06-03",
+            vibe="cultural",
+        )
+    )
+
+    assert response.events == []
+    assert len(response.weather) == 1

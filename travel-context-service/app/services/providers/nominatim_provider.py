@@ -5,6 +5,7 @@ import logging
 import httpx
 
 from app.models.schemas import Coordinates, GeocodedLocation
+from app.services.http_retry import request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -14,13 +15,20 @@ class GeocodingError(Exception):
 
 
 class NominatimProvider:
-    def __init__(self, base_url: str, user_agent: str):
+    def __init__(
+        self,
+        base_url: str,
+        user_agent: str,
+        client: httpx.AsyncClient | None = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.user_agent = user_agent
+        self.client = client or httpx.AsyncClient(timeout=10.0)
+        self._owns_client = client is None
 
     async def geocode(self, destination: str) -> GeocodedLocation:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
+        response = await request_with_retry(
+            lambda: self.client.get(
                 f"{self.base_url}/search",
                 params={
                     "q": destination,
@@ -31,19 +39,20 @@ class NominatimProvider:
                 },
                 headers={"User-Agent": self.user_agent},
             )
-            logger.info(
-                "Nominatim response status=%s response_bytes=%s",
+        )
+        logger.info(
+            "Nominatim response status=%s response_bytes=%s",
+            response.status_code,
+            len(response.content),
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "Nominatim error status=%s body=%r",
                 response.status_code,
-                len(response.content),
+                response.text[:1000],
             )
-            if response.status_code >= 400:
-                logger.warning(
-                    "Nominatim error status=%s body=%r",
-                    response.status_code,
-                    response.text[:1000],
-                )
-            response.raise_for_status()
-            results = response.json()
+        response.raise_for_status()
+        results = response.json()
 
         if not results:
             raise GeocodingError(f"Could not geocode destination: {destination}")
@@ -70,3 +79,7 @@ class NominatimProvider:
                 lon=float(first_result["lon"]),
             ),
         )
+
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self.client.aclose()
