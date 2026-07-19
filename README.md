@@ -51,7 +51,7 @@ TripTailor runs as four application services plus Postgres:
 | Frontend | `frontend/` | React, Vite, and Refine UI for authentication, trip creation, trip listing, and itinerary editing. |
 | Backend API | `backend/` | Public Spring Boot backend-for-frontend. Owns auth, JWT validation, trip orchestration, PostgreSQL persistence, and calls to internal services. |
 | GenAI Service | `genai-service/` | Internal FastAPI service that prompts the configured LLM and validates structured itinerary output. |
-| Travel Context Service | `travel-context-service/` | Internal FastAPI enrichment service for geocoding, events, weather, ranking, and cache-backed provider calls. |
+| Travel Context Service | `travel-context-service/` | Internal FastAPI enrichment service for geocoding, events, weather, provider fallbacks, and cache-backed provider calls. |
 | Database | Docker Compose / Helm | PostgreSQL backing the backend. |
 
 In Docker Compose and Kubernetes, the gateway exposes the frontend and routes `/api/*` to the backend. GenAI, travel-context, and Postgres are internal implementation services.
@@ -84,7 +84,7 @@ The same Prometheus + Grafana + Tempo suite ships to both deployment targets:
 
 TripTailor uses independently deployable services with explicit HTTP contracts. The browser loads the React application through the NGINX gateway and sends all application requests to the public Spring Boot backend. That backend is the system's security and orchestration boundary: it authenticates travelers with signed JWTs, validates public requests, coordinates trip generation, and prevents clients from calling internal services directly.
 
-The backend owns durable state directly in PostgreSQL through Spring JDBC. For trip creation and activity regeneration, the backend calls the GenAI service. The GenAI service builds prompts, requests structured output from the configured LLM, validates that output with Pydantic models, and assigns the identifiers required by the application contract. Before schedule generation, it requests destination context from the travel-context service. That service encapsulates geocoding, event, and weather providers, including caching and ranking, so provider-specific concerns do not leak into trip orchestration.
+The backend owns durable state directly in PostgreSQL through Spring JDBC. For trip creation and activity regeneration, the backend calls the GenAI service. The GenAI service builds prompts, requests structured output from the configured LLM, validates that output with Pydantic models, and assigns the identifiers required by the application contract. Before schedule generation, it requests destination context from the travel-context service. That service encapsulates geocoding, event, and weather providers, including provider fallbacks and bounded in-memory caching, so provider-specific concerns do not leak into trip orchestration.
 
 All application-owned HTTP service interfaces use JSON and are described in `api-specification/`. The public contract is `frontend.yaml`; internal contracts isolate GenAI and travel-context behavior. Runtime deployment is available through Docker Compose and the Helm chart. Prometheus scrapes every backend service, Grafana visualizes the exported metrics, and Tempo receives distributed traces.
 
@@ -153,6 +153,8 @@ The PlantUML sources in `diagrams/` are version-controlled documentation of the 
 - [Activity Update Flow](diagrams/update-flow-diagram.puml) — request sequence for regenerating one activity.
 - [Class Diagram](diagrams/class-diagram.puml) — detailed trip and activity data types.
 
+Rendered SVGs are committed under `diagrams/rendered/` so the models remain reviewable in GitHub without local tooling. Regenerate them from the PlantUML sources before submitting changes that affect architecture or domain structure.
+
 #### Subsystem Decomposition
 
 ![TripTailor subsystem decomposition](diagrams/rendered/subsystem-decomposition.svg)
@@ -164,6 +166,18 @@ The PlantUML sources in `diagrams/` are version-controlled documentation of the 
 #### Analysis Object Model
 
 ![TripTailor analysis object model](diagrams/rendered/analysis-object-model.svg)
+
+#### Itinerary Creation Flow
+
+![TripTailor itinerary creation flow](diagrams/rendered/creation-flow-diagram.svg)
+
+#### Activity Update Flow
+
+![TripTailor activity update flow](diagrams/rendered/update-flow-diagram.svg)
+
+#### Class Diagram
+
+![TripTailor class diagram](diagrams/rendered/class-diagram.svg)
 
 ## Local Commands
 

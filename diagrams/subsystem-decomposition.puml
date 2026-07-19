@@ -52,6 +52,8 @@ cloud "Travel Data Providers\nNominatim / Photon (geocoding)\nSerpApi (events)\n
 Traveler --> Gateway : HTTPS
 Gateway --> Frontend : /*\nstatic application
 Gateway --> Backend : /api/*\nJSON/HTTPS
+Gateway --> Grafana : /grafana/*\nmonitoring UI
+Gateway --> Prometheus : /prometheus/*\nmetrics UI
 
 Backend --> GenAI : Schedule/alternative REST
 Backend --> Database : Traveler/trip JDBC/SQL
@@ -60,8 +62,12 @@ GenAI --> Context : POST /trip-context
 Context --> Providers : Provider-specific HTTPS APIs
 
 Prometheus ..> Backend
+Prometheus ..> GenAI
+Prometheus ..> Context
 Grafana --> Prometheus : PromQL
 Backend ..> Tempo
+GenAI ..> Tempo
+Context ..> Tempo
 Grafana --> Tempo : trace queries
 
 legend left
