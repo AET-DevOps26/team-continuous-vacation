@@ -1,4 +1,4 @@
-@startuml creation-flow
+@startuml creation-flow-diagram
 title TripTailor - Itinerary Creation Flow
 
 actor User
@@ -7,9 +7,9 @@ participant "Backend API\n(Spring Boot)" as API
 participant "GenAI Service\n(Python)" as AI
 participant "Travel Context\n(Python)" as Context
 database "PostgreSQL\n(owned by Backend)" as DB
-cloud "Geocoder\nNominatim / Photon" as Geo
-cloud "Events / Weather\nSerpApi / Open-Meteo" as Providers
-cloud "Configured LLM" as LLM
+participant "Geocoder\nNominatim / Photon" as Geo
+participant "Events / Weather\nSerpApi / Open-Meteo" as Providers
+participant "Configured LLM" as LLM
 
 User -> Frontend : Enter trip details
 Frontend -> API : POST /trips

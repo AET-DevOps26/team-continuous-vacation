@@ -1,10 +1,11 @@
-@startuml update-activity-flow
+@startuml update-flow-diagram
 title TripTailor - Activity Update (Micro-Regeneration) Flow
 
 actor User
 participant Frontend
 participant "Backend API\n(Spring Boot)" as API
 participant "GenAI Service\n(Python)" as AI
+participant "Configured LLM\n(OpenAI-compatible)" as LLM
 database "PostgreSQL\n(owned by Backend)" as DB
 
 User -> Frontend : Click "Edit" on activity block
@@ -16,7 +17,12 @@ API -> DB : Query itinerary + activity
 DB --> API : Return trip data
 
 API -> AI : POST /activities/alternative
-AI -> AI : Call LLM with targeted context
+AI -> LLM : Structured request with targeted context
+alt LLM returns valid activity JSON
+  LLM --> AI : Replacement activity candidate
+else LLM unavailable
+  AI -> AI : Build deterministic fallback alternative
+end
 AI --> API : Return replacement activity JSON
 
 API -> DB : Replace activity row

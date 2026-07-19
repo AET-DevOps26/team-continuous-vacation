@@ -13,8 +13,8 @@ URLs expose which services, and how to start the same system locally.
 ### Recommended Hosted Access: AET Cluster
 
 For tutor evaluation, use the AET Kubernetes deployment first. It has a stable
-HTTPS hostname, while the Azure VM deployment can receive a new public IP after
-some redeployments.
+HTTPS hostname and is the primary course deployment. The Azure VM deployment is
+also supported and uses an Azure public-IP DNS label for HTTPS access.
 
 | Service or UI | Hosted URL | Notes |
 | --- | --- | --- |
@@ -42,46 +42,49 @@ Suggested hosted evaluation flow:
 
 ### Azure VM Access
 
-The Azure VM deployment is also supported, but its public IP can change. Resolve
-the current IP first, then use the gateway on port `3000`.
+The Azure VM deployment is also supported. Terraform configures a static Azure
+Public IP resource (`triptailor-pip`) with a DNS label, and Ansible configures
+NGINX + Certbot for HTTPS. Use the FQDN for normal evaluation; raw IP access is
+only useful for low-level debugging because certificates are issued for the DNS
+name.
 
-Find the Azure VM public IP:
+Find the Azure VM FQDN:
 
 ```bash
 az login
 az account set --subscription "<subscription-id>"
 
-AZURE_VM_PUBLIC_IP="$(
+AZURE_VM_FQDN="$(
   az network public-ip show \
     --resource-group triptailor-rg \
     --name triptailor-pip \
-    --query ipAddress \
+    --query dnsSettings.fqdn \
     --output tsv
 )"
 
-echo "${AZURE_VM_PUBLIC_IP}"
+echo "${AZURE_VM_FQDN}"
 ```
 
 Azure VM URLs:
 
 | Service or UI | Azure URL |
 | --- | --- |
-| Main application | `http://<AZURE_VM_PUBLIC_IP>:3000/` |
-| Backend API through gateway | `http://<AZURE_VM_PUBLIC_IP>:3000/api/` |
-| Backend health | `http://<AZURE_VM_PUBLIC_IP>:3000/api/health` |
-| Backend OpenAPI | `http://<AZURE_VM_PUBLIC_IP>:3000/api/openapi.yaml` |
-| Demo login endpoint | `http://<AZURE_VM_PUBLIC_IP>:3000/api/auth/demo` |
-| Trips endpoint | `http://<AZURE_VM_PUBLIC_IP>:3000/api/trips` |
-| Prometheus | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/` |
-| Prometheus targets | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/targets` |
-| Grafana | `http://<AZURE_VM_PUBLIC_IP>:3000/grafana/` |
-| Grafana health | `http://<AZURE_VM_PUBLIC_IP>:3000/grafana/api/health` |
+| Main application | `https://<AZURE_VM_FQDN>/` |
+| Backend API through gateway | `https://<AZURE_VM_FQDN>/api/` |
+| Backend health | `https://<AZURE_VM_FQDN>/api/health` |
+| Backend OpenAPI | `https://<AZURE_VM_FQDN>/api/openapi.yaml` |
+| Demo login endpoint | `https://<AZURE_VM_FQDN>/api/auth/demo` |
+| Trips endpoint | `https://<AZURE_VM_FQDN>/api/trips` |
+| Prometheus | `https://<AZURE_VM_FQDN>/prometheus/` |
+| Prometheus targets | `https://<AZURE_VM_FQDN>/prometheus/targets` |
+| Grafana | `https://<AZURE_VM_FQDN>/grafana/` |
+| Grafana health | `https://<AZURE_VM_FQDN>/grafana/api/health` |
 
 Internal Azure VM services are not public as standalone URLs. To inspect them,
 SSH into the VM and use Docker Compose:
 
 ```bash
-ssh tripadmin@<AZURE_VM_PUBLIC_IP>
+ssh tripadmin@<AZURE_VM_FQDN>
 cd /opt/triptailor
 
 docker compose ps
@@ -1488,56 +1491,56 @@ bash scripts/docker-compose-smoke.sh
 
 #### Azure Hosted Service URLs
 
-With the default Azure deployment, the public host is the static public IP of
-`triptailor-pip`. In the tables below, replace `<AZURE_VM_PUBLIC_IP>` with that
-IP address.
+With the default Azure deployment, the public host is the DNS name attached to
+the static public IP resource `triptailor-pip`. In the tables below, replace
+`<AZURE_VM_FQDN>` with that DNS name.
 
-Find the deployed Azure IP with the CLI:
+Find the deployed Azure FQDN with the CLI:
 
 ```bash
 az login
 az account set --subscription "<subscription-id>"
 
-AZURE_VM_PUBLIC_IP="$(
+AZURE_VM_FQDN="$(
   az network public-ip show \
     --resource-group triptailor-rg \
     --name triptailor-pip \
-    --query ipAddress \
+    --query dnsSettings.fqdn \
     --output tsv
 )"
 
-echo "${AZURE_VM_PUBLIC_IP}"
+echo "${AZURE_VM_FQDN}"
 ```
 
-The same IP is visible in the Azure Portal under:
+The DNS name and backing IP are visible in the Azure Portal under:
 
 ```text
-Resource groups -> triptailor-rg -> triptailor-pip -> IP address
+Resource groups -> triptailor-rg -> triptailor-pip -> Configuration / Overview
 ```
 
 Public URLs exposed through the Azure VM gateway:
 
 | Service or UI | Azure URL | What to use it for |
 | --- | --- | --- |
-| Application gateway | `http://<AZURE_VM_PUBLIC_IP>:3000` | Main public entrypoint. NGINX serves the frontend and routes API/monitoring subpaths. |
-| Frontend | `http://<AZURE_VM_PUBLIC_IP>:3000/` | React TripTailor application: demo login, trip list, trip creation, trip detail, activity edits. |
-| Backend API through gateway | `http://<AZURE_VM_PUBLIC_IP>:3000/api/` | Public API prefix used by the frontend. |
-| Backend health | `http://<AZURE_VM_PUBLIC_IP>:3000/api/health` | Fast check that the backend is reachable through the gateway. |
-| Backend OpenAPI | `http://<AZURE_VM_PUBLIC_IP>:3000/api/openapi.yaml` | Public API contract served by the backend. |
-| Auth API | `http://<AZURE_VM_PUBLIC_IP>:3000/api/auth/demo`, `/api/auth/login`, `/api/auth/register` | Demo session, login, and registration endpoints. |
-| Trips API | `http://<AZURE_VM_PUBLIC_IP>:3000/api/trips` | Authenticated trip list and trip generation endpoint. |
-| Grafana | `http://<AZURE_VM_PUBLIC_IP>:3000/grafana/` | Dashboard UI for metrics and traces. |
-| Grafana health | `http://<AZURE_VM_PUBLIC_IP>:3000/grafana/api/health` | Verifies Grafana through the gateway. |
-| Prometheus | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/` | Prometheus UI through the gateway. |
-| Prometheus targets | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/targets` | Shows scrape status for backend, GenAI, and travel-context services. |
-| Prometheus alerts | `http://<AZURE_VM_PUBLIC_IP>:3000/prometheus/alerts` | Shows alert rule state. |
+| Application gateway | `https://<AZURE_VM_FQDN>` | Main public entrypoint. NGINX terminates HTTPS, serves the frontend, and routes API/monitoring subpaths. |
+| Frontend | `https://<AZURE_VM_FQDN>/` | React TripTailor application: demo login, trip list, trip creation, trip detail, activity edits. |
+| Backend API through gateway | `https://<AZURE_VM_FQDN>/api/` | Public API prefix used by the frontend. |
+| Backend health | `https://<AZURE_VM_FQDN>/api/health` | Fast check that the backend is reachable through the gateway. |
+| Backend OpenAPI | `https://<AZURE_VM_FQDN>/api/openapi.yaml` | Public API contract served by the backend. |
+| Auth API | `https://<AZURE_VM_FQDN>/api/auth/demo`, `/api/auth/login`, `/api/auth/register` | Demo session, login, and registration endpoints. |
+| Trips API | `https://<AZURE_VM_FQDN>/api/trips` | Authenticated trip list and trip generation endpoint. |
+| Grafana | `https://<AZURE_VM_FQDN>/grafana/` | Dashboard UI for metrics and traces. |
+| Grafana health | `https://<AZURE_VM_FQDN>/grafana/api/health` | Verifies Grafana through the gateway. |
+| Prometheus | `https://<AZURE_VM_FQDN>/prometheus/` | Prometheus UI through the gateway. |
+| Prometheus targets | `https://<AZURE_VM_FQDN>/prometheus/targets` | Shows scrape status for backend, GenAI, and travel-context services. |
+| Prometheus alerts | `https://<AZURE_VM_FQDN>/prometheus/alerts` | Shows alert rule state. |
 
 Example:
 
 ```bash
-curl -i "http://${AZURE_VM_PUBLIC_IP}:3000/api/health"
-open "http://${AZURE_VM_PUBLIC_IP}:3000/grafana/"
-open "http://${AZURE_VM_PUBLIC_IP}:3000/prometheus/targets"
+curl -i "https://${AZURE_VM_FQDN}/api/health"
+open "https://${AZURE_VM_FQDN}/grafana/"
+open "https://${AZURE_VM_FQDN}/prometheus/targets"
 ```
 
 Services that exist on Azure but are intentionally not public as standalone
@@ -1545,7 +1548,7 @@ URLs:
 
 | Service | Public Azure URL | How to reach it |
 | --- | --- | --- |
-| Backend container | No direct public `:8080` URL in the default deployment. | Use gateway URLs under `http://<AZURE_VM_PUBLIC_IP>:3000/api/*`, or SSH into the VM and call `http://backend:8080` from the Compose network. |
+| Backend container | No direct public `:8080` URL in the default deployment. | Use gateway URLs under `https://<AZURE_VM_FQDN>/api/*`, or SSH into the VM and call `http://backend:8080` from the Compose network. |
 | GenAI service | No public URL. | SSH into the VM and call it from the Compose network, for example `docker compose exec gateway wget -qO- http://genai-service:8000/health`. |
 | Travel context service | Not public through the default NSG. | SSH into the VM and use `curl http://localhost:8090/health`, or call `http://travel-context-service:8090/health` from the Compose network. |
 | Tempo | No public UI. | SSH into the VM and check `curl http://localhost:3200/ready`; traces are viewed in Grafana. |
@@ -1554,7 +1557,7 @@ URLs:
 Useful checks after SSH:
 
 ```bash
-ssh tripadmin@<AZURE_VM_PUBLIC_IP>
+ssh tripadmin@<AZURE_VM_FQDN>
 cd /opt/triptailor
 
 docker compose ps
@@ -1567,8 +1570,11 @@ curl -fsS http://localhost:3200/ready
 The Docker Compose file also publishes some direct host ports on the VM, such as
 `3001` for Grafana, `9090` for Prometheus, `8090` for travel context, and `5433`
 for PostgreSQL. Those ports are not reachable from the public internet unless
-the Azure NSG is changed. For normal evaluation, use the gateway URLs on port
-`3000` or SSH into the VM and access direct ports locally from there.
+the Azure NSG is changed. For normal evaluation, use the HTTPS gateway URLs under
+`https://<AZURE_VM_FQDN>/`, `https://<AZURE_VM_FQDN>/api/*`,
+`https://<AZURE_VM_FQDN>/grafana/*`, and
+`https://<AZURE_VM_FQDN>/prometheus/*`, or SSH into the VM and access direct
+ports locally from there.
 
 ### 18.2 Terraform
 
@@ -1799,6 +1805,20 @@ Commands:
 kubectl -n triptailor-local describe pod <pod>
 kubectl -n triptailor-local logs <pod> --previous
 kubectl -n triptailor-local get events --sort-by=.lastTimestamp
+```
+
+### 19.11 Kubernetes Connectivity Or Readiness Problems
+
+If the frontend loads but API requests return `502`, or readiness checks fail
+after the pod starts, verify that NetworkPolicy egress permits DNS and backend
+access. The frontend does not normally need those connections to start its NGINX
+process, but it does need them to proxy `/api/*` correctly.
+
+Commands:
+
+```bash
+kubectl -n triptailor-local describe networkpolicy triptailor-frontend
+kubectl -n triptailor-local exec deploy/frontend -- wget -S -O- http://backend:8080/health
 ```
 
 ## 20. Common Evaluation Script
