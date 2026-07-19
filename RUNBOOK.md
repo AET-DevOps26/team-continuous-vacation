@@ -1570,8 +1570,11 @@ curl -fsS http://localhost:3200/ready
 The Docker Compose file also publishes some direct host ports on the VM, such as
 `3001` for Grafana, `9090` for Prometheus, `8090` for travel context, and `5433`
 for PostgreSQL. Those ports are not reachable from the public internet unless
-the Azure NSG is changed. For normal evaluation, use the gateway URLs on port
-`3000` or SSH into the VM and access direct ports locally from there.
+the Azure NSG is changed. For normal evaluation, use the HTTPS gateway URLs under
+`https://<AZURE_VM_FQDN>/`, `https://<AZURE_VM_FQDN>/api/*`,
+`https://<AZURE_VM_FQDN>/grafana/*`, and
+`https://<AZURE_VM_FQDN>/prometheus/*`, or SSH into the VM and access direct
+ports locally from there.
 
 ### 18.2 Terraform
 
@@ -1793,7 +1796,7 @@ Common causes:
 | --- | --- |
 | `genai-service` | Missing/invalid LLM configuration. |
 | `backend` | Cannot connect to Postgres, database secret mismatch, GenAI unavailable, or invalid JWT secret too short. |
-| `frontend` | Image build issue, nginx config issue, or NetworkPolicy egress missing DNS/backend access. |
+| `frontend` | Image build issue or nginx config issue. |
 | `prometheus` | Invalid Prometheus config or rules. |
 
 Commands:
@@ -1802,6 +1805,20 @@ Commands:
 kubectl -n triptailor-local describe pod <pod>
 kubectl -n triptailor-local logs <pod> --previous
 kubectl -n triptailor-local get events --sort-by=.lastTimestamp
+```
+
+### 19.11 Kubernetes Connectivity Or Readiness Problems
+
+If the frontend loads but API requests return `502`, or readiness checks fail
+after the pod starts, verify that NetworkPolicy egress permits DNS and backend
+access. The frontend does not normally need those connections to start its NGINX
+process, but it does need them to proxy `/api/*` correctly.
+
+Commands:
+
+```bash
+kubectl -n triptailor-local describe networkpolicy triptailor-frontend
+kubectl -n triptailor-local exec deploy/frontend -- wget -S -O- http://backend:8080/health
 ```
 
 ## 20. Common Evaluation Script
